@@ -866,7 +866,7 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
                       // Fire Button
                       _buildTouchButton(
                         icon: Icons.gps_fixed,
-                        color: Colors.redAccent.withOpacity(0.4),
+                        color: Colors.redAccent.withValues(alpha: 0.4),
                         onDown: () {
                           if (!gameOver && canShoot) {
                             _shootBullet();
@@ -913,7 +913,7 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
         width: 72,
         height: 72,
         decoration: BoxDecoration(
-          color: color ?? Colors.white.withOpacity(0.2),
+          color: color ?? Colors.white.withValues(alpha: 0.2),
           shape: BoxShape.circle,
           border: Border.all(color: Colors.white24, width: 2),
         ),
@@ -1163,7 +1163,7 @@ class GamePainter extends CustomPainter {
 
       // Head shape
       final bossBodyPaint = Paint()
-        ..color = b.bodyColor.withOpacity(0.85)
+        ..color = b.bodyColor.withValues(alpha: 0.85)
         ..style = PaintingStyle.fill;
       final bossBodyPath = Path();
       bossBodyPath.addArc(
@@ -1183,7 +1183,7 @@ class GamePainter extends CustomPainter {
 
       // Highlight spot on head
       final highlightPaint = Paint()
-        ..color = b.highlightColor.withOpacity(0.85)
+        ..color = b.highlightColor.withValues(alpha: 0.85)
         ..style = PaintingStyle.fill;
       canvas.drawCircle(
         Offset(b.x + b.width * 0.42, b.y + b.height * 0.33),
@@ -1198,13 +1198,13 @@ class GamePainter extends CustomPainter {
       final double eyeRadius = b.width * 0.045;
 
       final whiteEyePaint = Paint()
-        ..color = Colors.white.withOpacity(0.85)
+        ..color = Colors.white.withValues(alpha: 0.85)
         ..style = PaintingStyle.fill;
       canvas.drawCircle(Offset(leftEyeX, eyeY), eyeRadius, whiteEyePaint);
       canvas.drawCircle(Offset(rightEyeX, eyeY), eyeRadius, whiteEyePaint);
 
       final darkEyePaint = Paint()
-        ..color = const Color(0xFF111111).withOpacity(0.85)
+        ..color = const Color(0xFF111111).withValues(alpha: 0.85)
         ..style = PaintingStyle.fill;
       canvas.drawCircle(Offset(leftEyeX, eyeY), eyeRadius * 0.45, darkEyePaint);
       canvas.drawCircle(
@@ -1215,7 +1215,7 @@ class GamePainter extends CustomPainter {
 
       // Tentacles (bezier lines)
       final tentaclePaint = Paint()
-        ..color = b.tentacleColor.withOpacity(0.85)
+        ..color = b.tentacleColor.withValues(alpha: 0.85)
         ..style = PaintingStyle.stroke
         ..strokeWidth = (b.width * 0.04).clamp(2.0, 10.0);
 
@@ -1281,7 +1281,9 @@ class GamePainter extends CustomPainter {
     // 9. Draw Exploding Particles
     for (final p in particles) {
       final particlePaint = Paint()
-        ..color = p.color.withOpacity((p.life / 30.0).clamp(0.0, 1.0))
+        ..color = p.color.withValues(
+          alpha: ((p.life / 30.0).clamp(0.0, 1.0)).toDouble(),
+        )
         ..style = PaintingStyle.fill;
       canvas.drawCircle(Offset(p.x, p.y), 2.0, particlePaint);
     }
@@ -1294,7 +1296,7 @@ class GamePainter extends CustomPainter {
         text: popup.text,
         x: popup.x,
         y: popup.y,
-        color: popup.color.withOpacity(alpha),
+        color: popup.color.withValues(alpha: alpha),
         fontSize: 14.0,
         bold: true,
         centered: true,
@@ -1307,7 +1309,7 @@ class GamePainter extends CustomPainter {
     // 12. Draw Full Screen Flash effect
     if (flashOpacity > 0.0) {
       final flashPaint = Paint()
-        ..color = Colors.white.withOpacity(flashOpacity)
+        ..color = Colors.white.withValues(alpha: flashOpacity)
         ..style = PaintingStyle.fill;
       canvas.drawRect(Rect.fromLTWH(0, 0, 800.0, logicalHeight), flashPaint);
     }
@@ -1344,7 +1346,7 @@ class GamePainter extends CustomPainter {
         text: 'COMBO x$multiplier ($comboCount)',
         x: scoreX,
         y: scoreY + 34.0,
-        color: const Color(0xFF00F2FE).withOpacity(comboAlpha),
+        color: const Color(0xFF00F2FE).withValues(alpha: comboAlpha),
         fontSize: 15.0,
         bold: true,
         alignRight: true,
@@ -1447,7 +1449,7 @@ class GamePainter extends CustomPainter {
         fontWeight: bold ? FontWeight.bold : FontWeight.normal,
         shadows: glowing
             ? [
-                Shadow(color: color.withOpacity(0.6), blurRadius: 10),
+                Shadow(color: color.withValues(alpha: 0.6), blurRadius: 10),
                 const Shadow(
                   color: Colors.black,
                   offset: Offset(2.0, 2.0),
