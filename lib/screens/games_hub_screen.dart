@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:localstorage/localstorage.dart';
 import 'alien_invasion_screen.dart';
+import 'wordle_screen.dart';
 
 class GamesHubScreen extends StatefulWidget {
   const GamesHubScreen({super.key});
@@ -38,6 +39,13 @@ class _GamesHubScreenState extends State<GamesHubScreen> {
       MaterialPageRoute(builder: (context) => const AlienInvasionScreen()),
     );
     _loadHighScore();
+  }
+
+  Future<void> _navigateToWordle(BuildContext context) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const WordleScreen()),
+    );
   }
 
   @override
@@ -298,17 +306,17 @@ class _GamesHubScreenState extends State<GamesHubScreen> {
                       icon: Icons.grid_on,
                       onTap: () {},
                     ),
-                    // Game 4: Wordle (Locked)
+                    // Game 4: Wordle (Now ACTIVE!)
                     _buildGameCard(
                       context: context,
-                      title: 'Word Search',
-                      description: 'Test your vocabulary! Guess the secret 5-letter word in six attempts or fewer, using color-coded feedback hints.',
+                      title: 'Wordle Clone',
+                      description: 'Test your vocabulary! Guess the secret 5-letter word in six attempts or fewer, using green/yellow color-coded feedback hints. A new word every day!',
                       genre: 'Word Puzzle',
-                      bannerGradient: const [Color(0xFF2C2F3F), Color(0xFF1F2232)],
-                      actionText: 'COMING SOON',
-                      isPlayable: false,
+                      bannerGradient: const [Color(0xFF006400), Color(0xFF1A7A1A)],
+                      actionText: 'PLAY NOW',
+                      isPlayable: true,
                       icon: Icons.abc_outlined,
-                      onTap: () {},
+                      onTap: () => _navigateToWordle(context),
                     ),
                   ]),
                 ),
