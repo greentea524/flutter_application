@@ -13,6 +13,9 @@ class AlienInvasionScreen extends StatefulWidget {
 
 class _AlienInvasionScreenState extends State<AlienInvasionScreen>
     with SingleTickerProviderStateMixin {
+  static const String _highScoreKey = 'alien_invasion_highscore';
+  static const String _bestWaveKey = 'alien_invasion_best_wave';
+
   late Ticker _ticker;
   final math.Random _random = math.Random();
   final FocusNode _focusNode = FocusNode();
@@ -51,6 +54,7 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
 
   int score = 0;
   int highScore = 0;
+  int bestWave = 0;
   int scoreFlashFrames = 0;
   int comboCount = 0;
   int comboTimerFrames = 0;
@@ -99,18 +103,34 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
 
   void _loadHighScore() {
     try {
-      final String? scoreStr = localStorage.getItem('alien_invasion_highscore');
+      final String? scoreStr = localStorage.getItem(_highScoreKey);
+      final String? waveStr = localStorage.getItem(_bestWaveKey);
       if (scoreStr != null) {
         highScore = int.tryParse(scoreStr) ?? 0;
+      }
+      if (waveStr != null) {
+        bestWave = int.tryParse(waveStr) ?? 0;
       }
     } catch (_) {}
   }
 
   void _saveHighScore() {
+    var shouldSave = false;
+
     if (score > highScore) {
       highScore = score;
+      shouldSave = true;
+    }
+
+    if (waveNumber > bestWave) {
+      bestWave = waveNumber;
+      shouldSave = true;
+    }
+
+    if (shouldSave) {
       try {
-        localStorage.setItem('alien_invasion_highscore', score.toString());
+        localStorage.setItem(_highScoreKey, highScore.toString());
+        localStorage.setItem(_bestWaveKey, bestWave.toString());
       } catch (_) {}
     }
   }
