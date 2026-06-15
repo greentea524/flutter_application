@@ -3,6 +3,7 @@ import 'package:localstorage/localstorage.dart';
 import 'alien_invasion_screen.dart';
 import 'game_2048_screen.dart';
 import 'minesweeper_screen.dart';
+import 'pacman_arcade_screen.dart';
 import 'wordle_screen.dart';
 
 class GamesHubScreen extends StatefulWidget {
@@ -18,6 +19,7 @@ class _GamesHubScreenState extends State<GamesHubScreen> {
   int _best2048Score = 0;
   int _bestMinesweeperScore = 0;
   int _bestMinesweeperLevel = 0;
+  int _bestPacmanScore = 0;
 
   @override
   void initState() {
@@ -32,6 +34,9 @@ class _GamesHubScreenState extends State<GamesHubScreen> {
         'alien_invasion_best_wave',
       );
       final String? score2048Str = localStorage.getItem('game_2048_best_score');
+      final String? pacmanScoreStr = localStorage.getItem(
+        'jsPacmanPersistentScore',
+      );
       final String? minesweeperBestScoreStr = localStorage.getItem(
         'minesweeper_best_score',
       );
@@ -42,6 +47,7 @@ class _GamesHubScreenState extends State<GamesHubScreen> {
       final int nextAlienScore = int.tryParse(scoreStr ?? '0') ?? 0;
       final int nextAlienWave = int.tryParse(alienWaveStr ?? '0') ?? 0;
       final int next2048Score = int.tryParse(score2048Str ?? '0') ?? 0;
+      final int nextPacmanScore = int.tryParse(pacmanScoreStr ?? '0') ?? 0;
       final int nextMinesweeperBestScore =
           int.tryParse(minesweeperBestScoreStr ?? '0') ?? 0;
       final int nextMinesweeperBestLevel =
@@ -51,6 +57,7 @@ class _GamesHubScreenState extends State<GamesHubScreen> {
         _highScore = nextAlienScore;
         _bestAlienWave = nextAlienWave;
         _best2048Score = next2048Score;
+        _bestPacmanScore = nextPacmanScore;
         _bestMinesweeperScore = nextMinesweeperBestScore;
         _bestMinesweeperLevel = nextMinesweeperBestLevel;
       });
@@ -87,6 +94,14 @@ class _GamesHubScreenState extends State<GamesHubScreen> {
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const MinesweeperScreen()),
+    );
+    _loadHighScore();
+  }
+
+  Future<void> _navigateToPacman(BuildContext context) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const PacmanArcadeScreen()),
     );
     _loadHighScore();
   }
@@ -186,132 +201,10 @@ class _GamesHubScreenState extends State<GamesHubScreen> {
                               ),
                             ],
                           ),
-                          // Stats/Profile Icon
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(
-                                0xFF1E2135,
-                              ).withValues(alpha: 0.6),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: const Color(
-                                  0xFF7B2CBF,
-                                ).withValues(alpha: 0.3),
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.stars,
-                                  color: Color(0xFFFFD54A),
-                                  size: 18,
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'Score: $_highScore',
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
                         ],
                       ),
                       const SizedBox(height: 32),
-                      // High score showcase card (Premium visual)
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(24),
-                          gradient: LinearGradient(
-                            colors: [
-                              const Color(0xFF1C1430).withValues(alpha: 0.75),
-                              const Color(0xFF0F1226).withValues(alpha: 0.75),
-                            ],
-                          ),
-                          border: Border.all(
-                            color: const Color(
-                              0xFF7B2CBF,
-                            ).withValues(alpha: 0.3),
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(
-                                0xFF7B2CBF,
-                              ).withValues(alpha: 0.1),
-                              blurRadius: 24,
-                              spreadRadius: -8,
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'CURRENT HIGHEST RECORD',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF9E8FFF),
-                                      letterSpacing: 1.5,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  const Text(
-                                    'Alien Invasion',
-                                    style: TextStyle(
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  const Text(
-                                    'Defend the galaxy and beat your limits.',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.grey,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                const Icon(
-                                  Icons.emoji_events,
-                                  color: Color(0xFFFFD700),
-                                  size: 40,
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '$_highScore pts',
-                                  style: const TextStyle(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.w900,
-                                    color: Color(0xFFFFD700),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 8),
                       const Text(
                         'EXPLORE THE ARCADE',
                         style: TextStyle(
@@ -353,21 +246,22 @@ class _GamesHubScreenState extends State<GamesHubScreen> {
                       statText: 'Best: $_highScore | Wave: $_bestAlienWave',
                       onTap: () => _navigateToGame(context),
                     ),
-                    // Game 2: Pacman (Locked)
+                    // Game 2: Pacman (Active)
                     _buildGameCard(
                       context: context,
                       title: 'Pacman Arcade',
                       description:
-                          'Chomp pellets, dodge ghosts (Blinky, Pinky, Inky, and Clyde), and clear the retro neon maze to establish your high score.',
+                          'Chomp dungeon pellets, dodge roaming ghosts, and survive increasingly crowded rounds in this arcade maze challenge.',
                       genre: 'Maze / Arcade',
                       bannerGradient: const [
-                        Color(0xFF2C2F3F),
-                        Color(0xFF1F2232),
+                        Color(0xFF0E3A66),
+                        Color(0xFF1E6091),
                       ],
-                      actionText: 'COMING SOON',
-                      isPlayable: false,
-                      icon: Icons.pie_chart_outline,
-                      onTap: () {},
+                      actionText: 'PLAY NOW',
+                      isPlayable: true,
+                      icon: Icons.sports_esports,
+                      statText: 'Best: $_bestPacmanScore',
+                      onTap: () => _navigateToPacman(context),
                     ),
                     // Game 3: 2048 (Locked)
                     _buildGameCard(
