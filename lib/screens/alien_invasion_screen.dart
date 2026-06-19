@@ -79,6 +79,18 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
   double _lag = 0.0;
   Duration _lastTime = Duration.zero;
 
+  Future<void> _playClickSound() async {
+    try {
+      await SystemSound.play(SystemSoundType.click);
+    } catch (_) {}
+  }
+
+  Future<void> _playAlertSound() async {
+    try {
+      await SystemSound.play(SystemSoundType.alert);
+    } catch (_) {}
+  }
+
   @override
   void initState() {
     super.initState();
@@ -353,6 +365,7 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
             bullet.x + bulletWidth > alien.x &&
             bullet.y < alien.y + alien.height &&
             bullet.y + bulletHeight > alien.y) {
+          _playClickSound();
           _createFireworks(alien.x, alien.y);
           HapticFeedback.lightImpact();
 
@@ -394,6 +407,7 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
             bullet.x + bulletWidth > b.x &&
             bullet.y < b.y + b.height &&
             bullet.y + bulletHeight > b.y) {
+          _playClickSound();
           b.hp--;
           bullets.removeAt(bIndex);
           hits++;
@@ -401,6 +415,7 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
           _addScore(5, bullet.x, bullet.y, const Color(0xFF9BE7FF));
 
           if (b.hp <= 0) {
+            _playAlertSound();
             _createFireworks(b.x + b.width / 2, b.y + b.height / 2);
             _createFireworks(b.x + b.width / 2 + 10, b.y + b.height / 2);
             flashOpacity = 0.6;
@@ -429,6 +444,7 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
           p.y + powerUpSize > player.y;
 
       if (collected) {
+        _playAlertSound();
         _applyWeaponUpgrade();
         HapticFeedback.vibrate();
         if (powerUps.isEmpty) {
@@ -452,6 +468,7 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
           c.y - coinRadius < player.y + player.height;
 
       if (collected) {
+        _playClickSound();
         _addScore(
           coinValue,
           c.x,
@@ -544,6 +561,7 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
 
       bulletsShot += bulletsPerShot;
       canShoot = false;
+      _playClickSound();
       HapticFeedback.selectionClick();
 
       Future.delayed(const Duration(milliseconds: 200), () {
@@ -624,6 +642,7 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
   void _endGame() {
     gameOver = true;
     flashOpacity = 0.8;
+    _playAlertSound();
     HapticFeedback.vibrate();
     _saveHighScore();
   }

@@ -22,6 +22,8 @@ class _WordleScreenState extends State<WordleScreen>
     with TickerProviderStateMixin {
   static const int wordLength = 5;
   static const int maxGuesses = 6;
+  static const String _wordSeedDayKey = 'wordle_seed_day';
+  static const String _wordSeedIndexKey = 'wordle_seed_index';
 
   late String _targetWord;
   List<List<String>> _grid = []; // 6 rows x 5 columns of letters
@@ -54,17 +56,73 @@ class _WordleScreenState extends State<WordleScreen>
   @override
   void initState() {
     super.initState();
+    _setInitialWordShift();
     _initGame();
     _loadDictionary();
     _loadStats();
   }
 
-  void _initGame() {
-    // Pick a target word based on the day (same as original JS logic)
+  String _todayKey() {
+    final now = DateTime.now();
+    final month = now.month.toString().padLeft(2, '0');
+    final day = now.day.toString().padLeft(2, '0');
+    return '${now.year}-$month-$day';
+  }
+
+  int _dayOffsetFromBase() {
     final offsetFromDate = DateTime(2022, 1, 1);
-    final dayOffset = DateTime.now().difference(offsetFromDate).inDays;
-    final wordIndex = (dayOffset + _wordShift) % kTargetWords.length;
+    return DateTime.now().difference(offsetFromDate).inDays;
+  }
+
+  int _currentWordIndex() {
+    final dayOffset = _dayOffsetFromBase();
+    return (dayOffset + _wordShift) % kTargetWords.length;
+  }
+
+  void _setWordShiftFromIndex(int wordIndex) {
+    final dayOffset = _dayOffsetFromBase();
+    _wordShift = (wordIndex - dayOffset) % kTargetWords.length;
+    if (_wordShift < 0) {
+      _wordShift += kTargetWords.length;
+    }
+  }
+
+  void _saveCurrentSeed() {
+    if (kTargetWords.isEmpty) return;
+
+    localStorage.setItem(_wordSeedDayKey, _todayKey());
+    localStorage.setItem(_wordSeedIndexKey, _currentWordIndex().toString());
+  }
+
+  void _setInitialWordShift() {
+    if (kTargetWords.isEmpty) {
+      _wordShift = 0;
+      return;
+    }
+
+    final storedDay = localStorage.getItem(_wordSeedDayKey);
+    final storedIndex = int.tryParse(
+      localStorage.getItem(_wordSeedIndexKey) ?? '',
+    );
+
+    if (storedDay == _todayKey() &&
+        storedIndex != null &&
+        storedIndex >= 0 &&
+        storedIndex < kTargetWords.length) {
+      _setWordShiftFromIndex(storedIndex);
+      return;
+    }
+
+    _setWordShiftFromIndex(math.Random().nextInt(kTargetWords.length));
+  }
+
+  void _initGame() {
+    if (kTargetWords.isEmpty) return;
+
+    // Pick a target word based on the day (same as original JS logic)
+    final wordIndex = _currentWordIndex();
     _targetWord = kTargetWords[wordIndex];
+    _saveCurrentSeed();
 
     _grid = List.generate(maxGuesses, (_) => List.filled(wordLength, ''));
     _tileStates = List.generate(
@@ -209,9 +267,7 @@ class _WordleScreenState extends State<WordleScreen>
   }
 
   void _resetGameWithRandomWord() {
-    final offsetFromDate = DateTime(2022, 1, 1);
-    final dayOffset = DateTime.now().difference(offsetFromDate).inDays;
-    final currentWordIndex = (dayOffset + _wordShift) % kTargetWords.length;
+    final currentWordIndex = _currentWordIndex();
 
     if (kTargetWords.length <= 1) {
       _wordShift = 0;
@@ -225,10 +281,7 @@ class _WordleScreenState extends State<WordleScreen>
       randomWordIndex = random.nextInt(kTargetWords.length);
     }
 
-    _wordShift = (randomWordIndex - dayOffset) % kTargetWords.length;
-    if (_wordShift < 0) {
-      _wordShift += kTargetWords.length;
-    }
+    _setWordShiftFromIndex(randomWordIndex);
 
     _initGame();
   }
