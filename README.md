@@ -15,3 +15,43 @@ A few resources to get you started if this is your first Flutter project:
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
+
+## Build Android Package (APK)
+
+Run these commands from the project root:
+
+```powershell
+cd c:\codebase\flutter-app\flutter_application
+flutter clean
+flutter pub get
+```
+
+Build a release APK:
+
+```powershell
+flutter build apk --release
+```
+
+Output location:
+
+- `build/app/outputs/flutter-apk/app-release.apk`
+
+Build split APKs by ABI (optional):
+
+```powershell
+flutter build apk --split-per-abi
+```
+
+Output location:
+
+- `build/app/outputs/flutter-apk/`
+
+Build Android App Bundle for Play Store (recommended for publishing):
+
+```powershell
+flutter build appbundle --release
+```
+
+Output location:
+
+- `build/app/outputs/bundle/release/app-release.aab`
