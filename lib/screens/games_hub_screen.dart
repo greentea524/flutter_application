@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:localstorage/localstorage.dart';
 import 'alien_invasion_screen.dart';
+import 'boxing_screen.dart';
 import 'game_2048_screen.dart';
 import 'minesweeper_screen.dart';
 import 'pacman_arcade_screen.dart';
@@ -22,6 +23,7 @@ class _GamesHubScreenState extends State<GamesHubScreen> {
   int _bestMinesweeperLevel = 0;
   int _bestPacmanScore = 0;
   int _sudokuSolved = 0;
+  int _bestBoxingFight = 0;
 
   @override
   void initState() {
@@ -48,6 +50,9 @@ class _GamesHubScreenState extends State<GamesHubScreen> {
       final String? sudokuSolvedStr = localStorage.getItem(
         'sudoku_solved_count',
       );
+      final String? boxingBestFightStr = localStorage.getItem(
+        'boxing_best_fight',
+      );
 
       final int nextAlienScore = int.tryParse(scoreStr ?? '0') ?? 0;
       final int nextAlienWave = int.tryParse(alienWaveStr ?? '0') ?? 0;
@@ -58,6 +63,8 @@ class _GamesHubScreenState extends State<GamesHubScreen> {
       final int nextMinesweeperBestLevel =
           int.tryParse(minesweeperBestLevelStr ?? '0') ?? 0;
       final int nextSudokuSolved = int.tryParse(sudokuSolvedStr ?? '0') ?? 0;
+      final int nextBoxingBestFight =
+          int.tryParse(boxingBestFightStr ?? '0') ?? 0;
 
       setState(() {
         _highScore = nextAlienScore;
@@ -67,6 +74,7 @@ class _GamesHubScreenState extends State<GamesHubScreen> {
         _bestMinesweeperScore = nextMinesweeperBestScore;
         _bestMinesweeperLevel = nextMinesweeperBestLevel;
         _sudokuSolved = nextSudokuSolved;
+        _bestBoxingFight = nextBoxingBestFight;
       });
     } catch (_) {
       // Fallback if localStorage fails
@@ -117,6 +125,14 @@ class _GamesHubScreenState extends State<GamesHubScreen> {
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const SudokuScreen()),
+    );
+    _loadHighScore();
+  }
+
+  Future<void> _navigateToBoxing(BuildContext context) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const BoxingScreen()),
     );
     _loadHighScore();
   }
@@ -345,6 +361,23 @@ class _GamesHubScreenState extends State<GamesHubScreen> {
                       icon: Icons.grid_3x3,
                       statText: 'Solved: $_sudokuSolved',
                       onTap: () => _navigateToSudoku(context),
+                    ),
+                    // Game 7: Boxing RPG (Active)
+                    _buildGameCard(
+                      context: context,
+                      title: 'Boxing RPG',
+                      description:
+                          'Step into the ring as a Brawler, Speedster, or Tank. Trade punches with rotating CPU fighters, level up, buy potions and glove upgrades, and topple the Titan Boss every fourth fight.',
+                      genre: 'RPG / Brawler',
+                      bannerGradient: const [
+                        Color(0xFF7A1F1F),
+                        Color(0xFFB23A2E),
+                      ],
+                      actionText: 'PLAY NOW',
+                      isPlayable: true,
+                      icon: Icons.sports_mma,
+                      statText: 'Best Fight: $_bestBoxingFight',
+                      onTap: () => _navigateToBoxing(context),
                     ),
                   ]),
                 ),

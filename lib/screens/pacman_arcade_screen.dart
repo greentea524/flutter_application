@@ -493,11 +493,6 @@ class _PacmanArcadeScreenState extends State<PacmanArcadeScreen> {
     return !_isBlocked(nx, nz);
   }
 
-  bool _isNearTileCenter(Offset position, {double epsilon = 0.08}) {
-    return (position.dx - position.dx.round()).abs() < epsilon &&
-        (position.dy - position.dy.round()).abs() < epsilon;
-  }
-
   bool _isCircleBlocked(Offset position) {
     final int minX = (position.dx - (_pacmanRadiusTiles + _wallHalfExtentTiles))
         .floor();

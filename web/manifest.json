@@ -1,6 +1,6 @@
 {
-    "name": "flutter_application",
-    "short_name": "flutter_application",
+    "name": "Nebula Play",
+    "short_name": "Nebula Play",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
