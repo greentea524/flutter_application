@@ -4,6 +4,7 @@ import 'alien_invasion_screen.dart';
 import 'game_2048_screen.dart';
 import 'minesweeper_screen.dart';
 import 'pacman_arcade_screen.dart';
+import 'sudoku_screen.dart';
 import 'wordle_screen.dart';
 
 class GamesHubScreen extends StatefulWidget {
@@ -20,6 +21,7 @@ class _GamesHubScreenState extends State<GamesHubScreen> {
   int _bestMinesweeperScore = 0;
   int _bestMinesweeperLevel = 0;
   int _bestPacmanScore = 0;
+  int _sudokuSolved = 0;
 
   @override
   void initState() {
@@ -43,6 +45,9 @@ class _GamesHubScreenState extends State<GamesHubScreen> {
       final String? minesweeperBestLevelStr = localStorage.getItem(
         'minesweeper_best_level',
       );
+      final String? sudokuSolvedStr = localStorage.getItem(
+        'sudoku_solved_count',
+      );
 
       final int nextAlienScore = int.tryParse(scoreStr ?? '0') ?? 0;
       final int nextAlienWave = int.tryParse(alienWaveStr ?? '0') ?? 0;
@@ -52,6 +57,7 @@ class _GamesHubScreenState extends State<GamesHubScreen> {
           int.tryParse(minesweeperBestScoreStr ?? '0') ?? 0;
       final int nextMinesweeperBestLevel =
           int.tryParse(minesweeperBestLevelStr ?? '0') ?? 0;
+      final int nextSudokuSolved = int.tryParse(sudokuSolvedStr ?? '0') ?? 0;
 
       setState(() {
         _highScore = nextAlienScore;
@@ -60,6 +66,7 @@ class _GamesHubScreenState extends State<GamesHubScreen> {
         _bestPacmanScore = nextPacmanScore;
         _bestMinesweeperScore = nextMinesweeperBestScore;
         _bestMinesweeperLevel = nextMinesweeperBestLevel;
+        _sudokuSolved = nextSudokuSolved;
       });
     } catch (_) {
       // Fallback if localStorage fails
@@ -102,6 +109,14 @@ class _GamesHubScreenState extends State<GamesHubScreen> {
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const PacmanArcadeScreen()),
+    );
+    _loadHighScore();
+  }
+
+  Future<void> _navigateToSudoku(BuildContext context) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const SudokuScreen()),
     );
     _loadHighScore();
   }
@@ -313,6 +328,23 @@ class _GamesHubScreenState extends State<GamesHubScreen> {
                       statText:
                           'Best: $_bestMinesweeperScore | Lvl: $_bestMinesweeperLevel',
                       onTap: () => _navigateToMinesweeper(context),
+                    ),
+                    // Game 6: Sudoku (Active)
+                    _buildGameCard(
+                      context: context,
+                      title: 'Sudoku',
+                      description:
+                          'Fill the 9×9 grid so every row, column, and 3×3 box holds 1–9. Pick a difficulty, use hints when stuck, and solve unique puzzles generated every game.',
+                      genre: 'Logic / Puzzle',
+                      bannerGradient: const [
+                        Color(0xFF3A0CA3),
+                        Color(0xFF4361EE),
+                      ],
+                      actionText: 'PLAY NOW',
+                      isPlayable: true,
+                      icon: Icons.grid_3x3,
+                      statText: 'Solved: $_sudokuSolved',
+                      onTap: () => _navigateToSudoku(context),
                     ),
                   ]),
                 ),
