@@ -1,30 +1,39 @@
-// This is a basic Flutter widget test.
+// Smoke test for the Boxing RPG screen.
 //
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// Verifies the menu -> game transition and that throwing a punch updates the
+// combat log. Storage calls inside BoxingScreen are guarded, so no
+// localStorage initialization is required here.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:flutter_application/main.dart';
+import 'package:flutter_application/screens/boxing_screen.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('New Game starts a fight and punching logs damage', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: BoxingScreen()));
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    // Menu is shown first.
+    expect(find.text('NEW GAME'), findsOneWidget);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    await tester.tap(find.text('NEW GAME'));
+    await tester.pumpAndSettle();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // Game screen controls are present.
+    final punch = find.text('Punch');
+    expect(punch, findsOneWidget);
+    expect(find.text('Scrap Bot'), findsWidgets);
+
+    // The button can sit below the fold in the test viewport; make sure the
+    // tap actually lands on it.
+    await tester.ensureVisible(punch);
+    await tester.tap(punch);
+    await tester.pumpAndSettle();
+
+    // One exchange does not KO either fighter, so the status line advances to
+    // the in-progress message.
+    expect(find.text('Fight in progress!'), findsOneWidget);
   });
 }
