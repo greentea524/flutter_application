@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -51,6 +52,8 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
   final List<GamePowerUp> powerUps = [];
   final List<GameCoin> coins = [];
   final List<GameScorePopup> scorePopups = [];
+  final List<GameStar> stars = [];
+  final List<GamePlanet> planets = [];
 
   int score = 0;
   int highScore = 0;
@@ -161,6 +164,38 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
     powerUps.clear();
     coins.clear();
     scorePopups.clear();
+    stars.clear();
+    planets.clear();
+
+    // Create background stars
+    for (int i = 0; i < 60; i++) {
+      stars.add(GameStar(
+        x: _random.nextDouble() * logicalWidth,
+        y: _random.nextDouble() * 900.0,
+        speed: _random.nextDouble() * 1.5 + 0.5,
+        radius: _random.nextDouble() * 1.2 + 0.8,
+        color: Colors.white.withValues(alpha: _random.nextDouble() * 0.5 + 0.3),
+      ));
+    }
+    
+    // Create a couple of planets
+    planets.add(GamePlanet(
+      x: logicalWidth * 0.8,
+      y: 100.0,
+      radius: 40.0,
+      speed: 0.2,
+      color1: const Color(0xFF8B3A3A),
+      color2: const Color(0xFF2E0854),
+    ));
+    planets.add(GamePlanet(
+      x: logicalWidth * 0.15,
+      y: 400.0,
+      radius: 80.0,
+      speed: 0.1,
+      color1: const Color(0xFF20B2AA),
+      color2: const Color(0xFF000080),
+      hasRings: true,
+    ));
 
     score = 0;
     bulletsShot = 0;
@@ -292,6 +327,23 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
   }
 
   void _updateGame() {
+    // Update background
+    final currentHeight = _logicalHeight;
+    for (final star in stars) {
+      star.y += star.speed;
+      if (star.y > currentHeight) {
+        star.y = 0;
+        star.x = _random.nextDouble() * logicalWidth;
+      }
+    }
+    for (final planet in planets) {
+      planet.y += planet.speed;
+      if (planet.y - planet.radius > currentHeight) {
+        planet.y = -planet.radius * 2;
+        planet.x = _random.nextDouble() * logicalWidth;
+      }
+    }
+
     // Combo timer decrement
     if (comboTimerFrames > 0) {
       comboTimerFrames--;
@@ -321,7 +373,6 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
 
     // Update aliens & boss movement
     bool hitEdge = false;
-    final currentHeight = _logicalHeight;
 
     for (final alien in aliens) {
       alien.x += alienSpeed * alienDirection;
@@ -761,6 +812,8 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
                               powerUps: powerUps,
                               coins: coins,
                               scorePopups: scorePopups,
+                              stars: stars,
+                              planets: planets,
                               score: score,
                               comboCount: comboCount,
                               comboTimerFrames: comboTimerFrames,
@@ -1033,6 +1086,26 @@ class GameScorePopup {
   });
 }
 
+class GameStar {
+  double x;
+  double y;
+  double speed;
+  double radius;
+  Color color;
+  GameStar({required this.x, required this.y, required this.speed, required this.radius, required this.color});
+}
+
+class GamePlanet {
+  double x;
+  double y;
+  double radius;
+  double speed;
+  Color color1;
+  Color color2;
+  bool hasRings;
+  GamePlanet({required this.x, required this.y, required this.radius, required this.speed, required this.color1, required this.color2, this.hasRings = false});
+}
+
 // Canvas Painter
 class GamePainter extends CustomPainter {
   final GamePlayer player;
@@ -1043,6 +1116,8 @@ class GamePainter extends CustomPainter {
   final List<GamePowerUp> powerUps;
   final List<GameCoin> coins;
   final List<GameScorePopup> scorePopups;
+  final List<GameStar> stars;
+  final List<GamePlanet> planets;
 
   final int score;
   final int comboCount;
@@ -1073,6 +1148,8 @@ class GamePainter extends CustomPainter {
     required this.powerUps,
     required this.coins,
     required this.scorePopups,
+    required this.stars,
+    required this.planets,
     required this.score,
     required this.comboCount,
     required this.comboTimerFrames,
@@ -1107,32 +1184,89 @@ class GamePainter extends CustomPainter {
       canvas.translate(dx, dy);
     }
 
-    // 2. Draw Stars (ambient background)
-    final starsPaint = Paint()
-      ..color = Colors.white24
-      ..style = PaintingStyle.fill;
-    canvas.drawCircle(const Offset(100, 80), 1.0, starsPaint);
-    canvas.drawCircle(const Offset(350, 150), 1.5, starsPaint);
-    canvas.drawCircle(const Offset(650, 200), 1.0, starsPaint);
-    canvas.drawCircle(const Offset(200, 450), 2.0, starsPaint);
-    canvas.drawCircle(const Offset(500, 520), 1.0, starsPaint);
-    canvas.drawCircle(const Offset(700, 380), 1.5, starsPaint);
-    canvas.drawCircle(const Offset(150, 280), 1.0, starsPaint);
-    canvas.drawCircle(const Offset(600, 80), 2.0, starsPaint);
-    canvas.drawCircle(const Offset(400, 350), 1.0, starsPaint);
+    // 2. Draw Background (Stars and Planets)
+    for (final star in stars) {
+      final paint = Paint()
+        ..color = star.color
+        ..style = PaintingStyle.fill;
+      canvas.drawCircle(Offset(star.x, star.y), star.radius, paint);
+    }
+    
+    for (final planet in planets) {
+      if (planet.hasRings) {
+        final ringPaint = Paint()
+          ..color = planet.color1.withValues(alpha: 0.5)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 6.0;
+        canvas.drawOval(Rect.fromCenter(center: Offset(planet.x, planet.y), width: planet.radius * 3.5, height: planet.radius * 0.8), ringPaint);
+      }
+      
+      final planetPaint = Paint()
+        ..shader = ui.Gradient.radial(
+          Offset(planet.x - planet.radius * 0.3, planet.y - planet.radius * 0.3),
+          planet.radius * 1.5,
+          [planet.color1, planet.color2],
+        )
+        ..style = PaintingStyle.fill;
+      canvas.drawCircle(Offset(planet.x, planet.y), planet.radius, planetPaint);
+    }
 
-    // 3. Draw Player Jet (White vector path)
-    final playerPaint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.fill;
-    final playerPath = Path()
-      ..moveTo(player.x + player.width / 2, player.y)
-      ..lineTo(player.x, player.y + player.height)
-      ..lineTo(player.x + player.width * 0.3, player.y + player.height / 2)
-      ..lineTo(player.x + player.width * 0.7, player.y + player.height / 2)
-      ..lineTo(player.x + player.width, player.y + player.height)
+    // 3. Draw Player Jet (Detailed fighter jet)
+    final double px = player.x;
+    final double py = player.y;
+    final double pw = player.width;
+    final double ph = player.height;
+    
+    // Engine flame
+    final flameFlicker = _random.nextDouble() * 5.0;
+    final flamePaint = Paint()
+      ..shader = ui.Gradient.linear(
+        Offset(px + pw / 2, py + ph),
+        Offset(px + pw / 2, py + ph + 10 + flameFlicker),
+        [Colors.yellow, Colors.red.withValues(alpha: 0.0)],
+      );
+    final flamePath = Path()
+      ..moveTo(px + pw * 0.35, py + ph - 2)
+      ..lineTo(px + pw / 2, py + ph + 10 + flameFlicker)
+      ..lineTo(px + pw * 0.65, py + ph - 2)
       ..close();
-    canvas.drawPath(playerPath, playerPaint);
+    canvas.drawPath(flamePath, flamePaint);
+
+    // Jet body
+    final bodyPaint = Paint()..color = const Color(0xFFC0C0C0);
+    final wingPaint = Paint()..color = const Color(0xFF909090);
+    final accentPaint = Paint()..color = const Color(0xFFFF3333);
+    final glassPaint = Paint()..color = const Color(0xFF33CCFF);
+
+    // Wings
+    final wingPath = Path()
+      ..moveTo(px + pw / 2, py + ph * 0.3)
+      ..lineTo(px, py + ph * 0.8)
+      ..lineTo(px + pw * 0.2, py + ph)
+      ..lineTo(px + pw * 0.8, py + ph)
+      ..lineTo(px + pw, py + ph * 0.8)
+      ..close();
+    canvas.drawPath(wingPath, wingPaint);
+    
+    // Wing accents
+    canvas.drawPath(Path()..moveTo(px, py + ph * 0.8)..lineTo(px + pw * 0.1, py + ph * 0.8)..lineTo(px + pw * 0.2, py + ph)..lineTo(px + pw * 0.05, py + ph)..close(), accentPaint);
+    canvas.drawPath(Path()..moveTo(px + pw, py + ph * 0.8)..lineTo(px + pw * 0.9, py + ph * 0.8)..lineTo(px + pw * 0.8, py + ph)..lineTo(px + pw * 0.95, py + ph)..close(), accentPaint);
+
+    // Main fuselage
+    final fuselagePath = Path()
+      ..moveTo(px + pw / 2, py)
+      ..lineTo(px + pw * 0.35, py + ph)
+      ..lineTo(px + pw * 0.65, py + ph)
+      ..close();
+    canvas.drawPath(fuselagePath, bodyPaint);
+
+    // Cockpit
+    final cockpitPath = Path()
+      ..moveTo(px + pw / 2, py + ph * 0.2)
+      ..lineTo(px + pw * 0.42, py + ph * 0.5)
+      ..lineTo(px + pw * 0.58, py + ph * 0.5)
+      ..close();
+    canvas.drawPath(cockpitPath, glassPaint);
 
     // 4. Draw Bullets (Red Rectangles)
     final bulletPaint = Paint()
@@ -1274,27 +1408,45 @@ class GamePainter extends CustomPainter {
       );
     }
 
-    // 8. Draw Aliens (Space Invader vector style)
-    final alienPaint = Paint()
-      ..color = const Color(0xFF00FF55)
-      ..style = PaintingStyle.fill;
+    // 8. Draw Aliens (Sleek UFO design)
     for (final alien in aliens) {
-      final path = Path();
       final double cx = alien.x + alien.width / 2;
-      final double cy = alien.y + alien.height / 3;
-      final double r = alien.width / 4;
-      path.addArc(
-        Rect.fromCircle(center: Offset(cx, cy), radius: r),
+      final double cy = alien.y + alien.height / 2;
+      
+      // UFO glass dome
+      final domePaint = Paint()
+        ..shader = ui.Gradient.radial(
+          Offset(cx, cy - 2),
+          alien.width / 2.5,
+          [const Color(0xFF00FFFF), const Color(0xFF006666)],
+        )
+        ..style = PaintingStyle.fill;
+      final domePath = Path();
+      domePath.addArc(
+        Rect.fromCenter(center: Offset(cx, alien.y + alien.height * 0.4), width: alien.width * 0.6, height: alien.height * 0.8),
         math.pi,
         math.pi,
       );
+      canvas.drawPath(domePath, domePaint);
 
-      path.moveTo(alien.x, alien.y + alien.height);
-      path.lineTo(alien.x + alien.width / 4, alien.y + alien.height / 3);
-      path.lineTo(alien.x + (alien.width * 3) / 4, alien.y + alien.height / 3);
-      path.lineTo(alien.x + alien.width, alien.y + alien.height);
-      path.close();
-      canvas.drawPath(path, alienPaint);
+      // UFO saucer body
+      final saucerPaint = Paint()
+        ..shader = ui.Gradient.linear(
+          Offset(alien.x, cy),
+          Offset(alien.x + alien.width, cy),
+          [const Color(0xFF666666), const Color(0xFF333333)],
+        )
+        ..style = PaintingStyle.fill;
+      canvas.drawOval(
+        Rect.fromCenter(center: Offset(cx, alien.y + alien.height * 0.6), width: alien.width, height: alien.height * 0.5),
+        saucerPaint,
+      );
+
+      // UFO lights
+      final lightPaint = Paint()..color = (DateTime.now().millisecondsSinceEpoch ~/ 300 % 2 == 0) ? Colors.yellow : Colors.red;
+      canvas.drawCircle(Offset(cx - alien.width * 0.35, alien.y + alien.height * 0.6), 1.5, lightPaint);
+      canvas.drawCircle(Offset(cx + alien.width * 0.35, alien.y + alien.height * 0.6), 1.5, lightPaint);
+      canvas.drawCircle(Offset(cx, alien.y + alien.height * 0.7), 1.5, lightPaint);
     }
 
     // 9. Draw Exploding Particles
