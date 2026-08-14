@@ -5,6 +5,71 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:localstorage/localstorage.dart';
 
+class ShipConfig {
+  final String id;
+  final String name;
+  final String role;
+  final String description;
+  final int maxHp;
+  final double speed;
+  final int baseWeaponLevel;
+  final Color primaryColor;
+  final Color accentColor;
+  final IconData icon;
+
+  const ShipConfig({
+    required this.id,
+    required this.name,
+    required this.role,
+    required this.description,
+    required this.maxHp,
+    required this.speed,
+    required this.baseWeaponLevel,
+    required this.primaryColor,
+    required this.accentColor,
+    required this.icon,
+  });
+}
+
+const List<ShipConfig> kShipConfigs = [
+  ShipConfig(
+    id: 'fighter',
+    name: 'F-22 Starfighter',
+    role: 'Balanced Strike Craft',
+    description: 'Balanced speed, agility, and single-beam plasma blasters.',
+    maxHp: 100,
+    speed: 5.0,
+    baseWeaponLevel: 1,
+    primaryColor: Color(0xFF00F2FE),
+    accentColor: Color(0xFFFF3333),
+    icon: Icons.flight,
+  ),
+  ShipConfig(
+    id: 'cruiser',
+    name: 'Dreadnought Cruiser',
+    role: 'Heavy Armored Gunship',
+    description: 'Massive hull durability with factory-installed dual heavy cannons.',
+    maxHp: 180,
+    speed: 3.2,
+    baseWeaponLevel: 2,
+    primaryColor: Color(0xFFFF8800),
+    accentColor: Color(0xFFFFCC00),
+    icon: Icons.shield,
+  ),
+  ShipConfig(
+    id: 'interceptor',
+    name: 'Phantom Interceptor',
+    role: 'Rapid High-Speed Scout',
+    description: 'Extreme maneuvering speed with razor-sharp forward delta wings.',
+    maxHp: 60,
+    speed: 7.5,
+    baseWeaponLevel: 1,
+    primaryColor: Color(0xFF00FF88),
+    accentColor: Color(0xFF00BFFF),
+    icon: Icons.bolt,
+  ),
+];
+
 class AlienInvasionScreen extends StatefulWidget {
   const AlienInvasionScreen({super.key});
 
@@ -20,6 +85,10 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
   late Ticker _ticker;
   final math.Random _random = math.Random();
   final FocusNode _focusNode = FocusNode();
+
+  // Menu and ship selection
+  bool inMenu = true;
+  String selectedShipId = 'fighter';
 
   // Game configuration & constants
   static const double logicalWidth = 800.0;
@@ -73,6 +142,7 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
   bool leftPressed = false;
   bool rightPressed = false;
   bool spacePressed = false;
+  bool shootPressed = false;
 
   // Visual effects
   double shakeIntensity = 0.0;
@@ -150,20 +220,7 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
     }
   }
 
-  void _resetGame() {
-    player = GamePlayer()
-      ..width = 40
-      ..height = 20
-      ..speed = 5
-      ..x = logicalWidth / 2 - 20;
-
-    bullets.clear();
-    aliens.clear();
-    boss = null;
-    particles.clear();
-    powerUps.clear();
-    coins.clear();
-    scorePopups.clear();
+  void _initBackground() {
     stars.clear();
     planets.clear();
 
@@ -178,7 +235,7 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
       ));
     }
     
-    // Create a couple of planets
+    // Create planets
     planets.add(GamePlanet(
       x: logicalWidth * 0.8,
       y: 100.0,
@@ -196,17 +253,48 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
       color2: const Color(0xFF000080),
       hasRings: true,
     ));
+  }
+
+  void _resetGame() {
+    final config = kShipConfigs.firstWhere(
+      (c) => c.id == selectedShipId,
+      orElse: () => kShipConfigs[0],
+    );
+
+    final double pWidth = config.id == 'cruiser'
+        ? 52.0
+        : (config.id == 'interceptor' ? 36.0 : 40.0);
+    final double pHeight = config.id == 'cruiser' ? 24.0 : 20.0;
+
+    player = GamePlayer()
+      ..width = pWidth
+      ..height = pHeight
+      ..speed = config.speed
+      ..hp = config.maxHp
+      ..maxHp = config.maxHp
+      ..shipType = config.id
+      ..x = logicalWidth / 2 - pWidth / 2;
+
+    bullets.clear();
+    aliens.clear();
+    boss = null;
+    particles.clear();
+    powerUps.clear();
+    coins.clear();
+    scorePopups.clear();
+    _initBackground();
 
     score = 0;
     bulletsShot = 0;
     hits = 0;
     coinsCollected = 0;
-    weaponLevel = 1;
+    weaponLevel = config.baseWeaponLevel;
     waveNumber = 1;
     comboCount = 0;
     comboTimerFrames = 0;
     gameOver = false;
     canShoot = true;
+    shootPressed = false;
     alienDirection = 1;
     shakeIntensity = 0.0;
     flashOpacity = 0.0;
@@ -215,6 +303,19 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
 
     _adjustPlayerY();
     _createAliens();
+  }
+
+  void _damagePlayer(int amount) {
+    if (gameOver || inMenu) return;
+    player.hp = (player.hp - amount).clamp(0, player.maxHp);
+    shakeIntensity = 8.0;
+    flashOpacity = 0.4;
+    _playAlertSound();
+    HapticFeedback.heavyImpact();
+
+    if (player.hp <= 0) {
+      _endGame();
+    }
   }
 
   double alienDirection = 1.0;
@@ -302,7 +403,8 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
     const double msPerFrame = 1000.0 / 60.0;
 
     while (_lag >= msPerFrame) {
-      if (!gameOver) {
+      _updateBackground();
+      if (!gameOver && !inMenu) {
         _updateGame();
       }
       _lag -= msPerFrame;
@@ -326,8 +428,7 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
     }
   }
 
-  void _updateGame() {
-    // Update background
+  void _updateBackground() {
     final currentHeight = _logicalHeight;
     for (final star in stars) {
       star.y += star.speed;
@@ -343,6 +444,10 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
         planet.x = _random.nextDouble() * logicalWidth;
       }
     }
+  }
+
+  void _updateGame() {
+    final currentHeight = _logicalHeight;
 
     // Combo timer decrement
     if (comboTimerFrames > 0) {
@@ -359,7 +464,7 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
     }
 
     // Auto-fire or key-held fire
-    if (spacePressed && canShoot) {
+    if ((spacePressed || shootPressed) && canShoot) {
       _shootBullet();
     }
 
@@ -374,13 +479,16 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
     // Update aliens & boss movement
     bool hitEdge = false;
 
-    for (final alien in aliens) {
+    for (int i = aliens.length - 1; i >= 0; i--) {
+      final alien = aliens[i];
       alien.x += alienSpeed * alienDirection;
       if (alien.x + alien.width > logicalWidth || alien.x < 0) {
         hitEdge = true;
       }
       if (alien.y + alien.height > currentHeight - player.height - 20) {
-        _endGame();
+        _damagePlayer(20);
+        _createFireworks(alien.x, alien.y);
+        aliens.removeAt(i);
       }
     }
 
@@ -390,7 +498,8 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
         hitEdge = true;
       }
       if (boss!.y + boss!.height > currentHeight - player.height - 20) {
-        _endGame();
+        _damagePlayer(40);
+        boss!.y = 10.0;
       }
     }
 
@@ -748,23 +857,39 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
                       color: Colors.white,
                     ),
                   ),
-                  ElevatedButton(
-                    onPressed: _resetGame,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
+                  Row(
+                    children: [
+                      if (!inMenu)
+                        TextButton.icon(
+                          icon: const Icon(Icons.rocket_launch, size: 16, color: Color(0xFF00F2FE)),
+                          label: const Text('Hangar', style: TextStyle(color: Color(0xFF00F2FE), fontWeight: FontWeight.bold)),
+                          onPressed: () => setState(() => inMenu = true),
+                        ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: () {
+                          if (inMenu) {
+                            setState(() => inMenu = false);
+                          }
+                          _resetGame();
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text(
+                          'Restart',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
                       ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: const Text(
-                      'Restart',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
+                    ],
                   ),
                 ],
               ),
@@ -784,7 +909,7 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
                     clipBehavior: Clip.antiAlias,
                     child: MouseRegion(
                       onHover: (event) {
-                        if (gameOver) return;
+                        if (gameOver || inMenu) return;
                         // Map local position to logical coordinates
                         final RenderBox renderBox =
                             context.findRenderObject() as RenderBox;
@@ -833,8 +958,12 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
                             ),
                           ),
 
+                          // Hangar Ship Selector Overlay
+                          if (inMenu)
+                            _buildHangarOverlay(isMobile),
+
                           // Game instructions or Game Over modal overlay
-                          if (gameOver)
+                          if (gameOver && !inMenu)
                             Container(
                               color: Colors.black87,
                               width: double.infinity,
@@ -876,27 +1005,55 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
                                       color: Colors.grey,
                                     ),
                                   ),
-                                  const SizedBox(height: 32),
-                                  ElevatedButton(
-                                    onPressed: _resetGame,
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFF7B2CBF),
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 32,
-                                        vertical: 16,
+                                  const SizedBox(height: 28),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      OutlinedButton(
+                                        onPressed: () {
+                                          setState(() {
+                                            inMenu = true;
+                                            gameOver = false;
+                                          });
+                                        },
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: Colors.white,
+                                          side: const BorderSide(color: Color(0xFF00F2FE)),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 20,
+                                            vertical: 14,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(10),
+                                          ),
+                                        ),
+                                        child: const Text('CHANGE SHIP'),
                                       ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
+                                      const SizedBox(width: 16),
+                                      ElevatedButton(
+                                        onPressed: () {
+                                          _resetGame();
+                                        },
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: const Color(0xFF7B2CBF),
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 28,
+                                            vertical: 14,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(10),
+                                          ),
+                                        ),
+                                        child: const Text(
+                                          'PLAY AGAIN',
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                    child: const Text(
-                                      'PLAY AGAIN',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
+                                    ],
                                   ),
                                 ],
                               ),
@@ -935,16 +1092,21 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
                         ],
                       ),
 
-                      // Fire Button
+                      // Fire Button (Supports Hold to Shoot)
                       _buildTouchButton(
                         icon: Icons.gps_fixed,
-                        color: Colors.redAccent.withValues(alpha: 0.4),
+                        color: shootPressed
+                            ? Colors.redAccent.withValues(alpha: 0.75)
+                            : Colors.redAccent.withValues(alpha: 0.4),
                         onDown: () {
-                          if (!gameOver && canShoot) {
+                          setState(() => shootPressed = true);
+                          if (!gameOver && canShoot && !inMenu) {
                             _shootBullet();
                           }
                         },
-                        onUp: () {},
+                        onUp: () {
+                          setState(() => shootPressed = false);
+                        },
                       ),
                     ],
                   ),
@@ -952,15 +1114,20 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
               )
             else
               const Padding(
-                padding: EdgeInsets.all(16.0),
+                padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(Icons.keyboard, color: Colors.grey, size: 16),
                     SizedBox(width: 8),
-                    Text(
-                      'Controls: Left/Right Arrows or Mouse Hover to Move | Spacebar or Click to Shoot',
-                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                    Flexible(
+                      child: Text(
+                        'Controls: Left/Right Arrows or Mouse Hover to Move | Spacebar or Click to Shoot',
+                        style: TextStyle(color: Colors.grey, fontSize: 12),
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                      ),
                     ),
                   ],
                 ),
@@ -993,6 +1160,264 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
       ),
     );
   }
+
+  Widget _buildHangarOverlay(bool isMobile) {
+    final selectedConfig = kShipConfigs.firstWhere(
+      (c) => c.id == selectedShipId,
+      orElse: () => kShipConfigs[0],
+    );
+
+    return Container(
+      color: Colors.black.withValues(alpha: 0.88),
+      width: double.infinity,
+      height: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      child: Center(
+        child: SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 700),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                ShaderMask(
+                  shaderCallback: (bounds) => const LinearGradient(
+                    colors: [Color(0xFF00F2FE), Color(0xFF4FACFE)],
+                  ).createShader(bounds),
+                  child: const Text(
+                    'STARFLEET HANGAR',
+                    style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 3,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'SELECT YOUR COMBAT VESSEL',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 2,
+                    color: Color(0xFF9E8FFF),
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Ship Cards
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final bool useRow = constraints.maxWidth > 550;
+                    final cardWidgets = kShipConfigs.map((ship) {
+                      final bool isSelected = ship.id == selectedShipId;
+                      final cardBody = GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            selectedShipId = ship.id;
+                            _playClickSound();
+                          });
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          margin: const EdgeInsets.all(6.0),
+                          padding: const EdgeInsets.all(14.0),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? ship.primaryColor.withValues(alpha: 0.15)
+                                : const Color(0xFF141724).withValues(alpha: 0.7),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: isSelected
+                                  ? ship.primaryColor
+                                  : Colors.white12,
+                              width: isSelected ? 2.0 : 1.0,
+                            ),
+                            boxShadow: [
+                              if (isSelected)
+                                BoxShadow(
+                                  color: ship.primaryColor.withValues(alpha: 0.35),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 4),
+                                ),
+                            ],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Icon(
+                                    ship.icon,
+                                    color: isSelected ? ship.primaryColor : Colors.white70,
+                                    size: 26,
+                                  ),
+                                  if (isSelected)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: ship.primaryColor,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: const Text(
+                                        'ACTIVE',
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.black,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                ship.name,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: isSelected ? Colors.white : Colors.white70,
+                                ),
+                              ),
+                              Text(
+                                ship.role,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: ship.primaryColor,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              _buildStatBar('HULL', ship.maxHp / 180.0, '${ship.maxHp} HP', ship.primaryColor),
+                              const SizedBox(height: 6),
+                              _buildStatBar('SPEED', ship.speed / 7.5, '${ship.speed.toStringAsFixed(1)}x', ship.primaryColor),
+                              const SizedBox(height: 6),
+                              _buildStatBar('FIREPOWER', ship.baseWeaponLevel / 3.0, 'LVL ${ship.baseWeaponLevel}', ship.primaryColor),
+                            ],
+                          ),
+                        ),
+                      );
+
+                      return useRow ? Expanded(child: cardBody) : cardBody;
+                    }).toList();
+
+                    return useRow
+                        ? Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: cardWidgets,
+                          )
+                        : Column(
+                            children: cardWidgets,
+                          );
+                  },
+                ),
+
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.white12),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, size: 16, color: selectedConfig.primaryColor),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          selectedConfig.description,
+                          style: const TextStyle(fontSize: 12, color: Colors.white70),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.rocket_launch, size: 20),
+                  label: const Text(
+                    'LAUNCH MISSION',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      inMenu = false;
+                    });
+                    _resetGame();
+                    _playAlertSound();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF7B2CBF),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 40,
+                      vertical: 16,
+                    ),
+                    elevation: 10,
+                    shadowColor: const Color(0xFF7B2CBF).withValues(alpha: 0.7),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatBar(String label, double ratio, String valueText, Color color) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.0,
+                color: Colors.white60,
+              ),
+            ),
+            Text(
+              valueText,
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 3),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: ratio.clamp(0.0, 1.0),
+            minHeight: 4,
+            backgroundColor: Colors.white10,
+            valueColor: AlwaysStoppedAnimation<Color>(color),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 // Game Objects
@@ -1002,6 +1427,9 @@ class GamePlayer {
   double width = 40;
   double height = 20;
   double speed = 5;
+  int hp = 100;
+  int maxHp = 100;
+  String shipType = 'fighter';
 }
 
 class GameBullet {
@@ -1211,62 +1639,207 @@ class GamePainter extends CustomPainter {
       canvas.drawCircle(Offset(planet.x, planet.y), planet.radius, planetPaint);
     }
 
-    // 3. Draw Player Jet (Detailed fighter jet)
+    // 3. Draw Player Ship (Custom vector art per ship type)
     final double px = player.x;
     final double py = player.y;
     final double pw = player.width;
     final double ph = player.height;
     
-    // Engine flame
     final flameFlicker = _random.nextDouble() * 5.0;
-    final flamePaint = Paint()
-      ..shader = ui.Gradient.linear(
-        Offset(px + pw / 2, py + ph),
-        Offset(px + pw / 2, py + ph + 10 + flameFlicker),
-        [Colors.yellow, Colors.red.withValues(alpha: 0.0)],
+
+    if (player.shipType == 'cruiser') {
+      // DREADNOUGHT CRUISER (Heavy armor, dual heavy thrusters, orange glowing core)
+      final flamePaint = Paint()
+        ..shader = ui.Gradient.linear(
+          Offset(px + pw / 2, py + ph),
+          Offset(px + pw / 2, py + ph + 12 + flameFlicker),
+          [Colors.orangeAccent, Colors.red.withValues(alpha: 0.0)],
+        );
+      // Dual engines
+      canvas.drawPath(
+        Path()
+          ..moveTo(px + pw * 0.22, py + ph - 2)
+          ..lineTo(px + pw * 0.32, py + ph + 10 + flameFlicker)
+          ..lineTo(px + pw * 0.42, py + ph - 2)
+          ..close(),
+        flamePaint,
       );
-    final flamePath = Path()
-      ..moveTo(px + pw * 0.35, py + ph - 2)
-      ..lineTo(px + pw / 2, py + ph + 10 + flameFlicker)
-      ..lineTo(px + pw * 0.65, py + ph - 2)
-      ..close();
-    canvas.drawPath(flamePath, flamePaint);
+      canvas.drawPath(
+        Path()
+          ..moveTo(px + pw * 0.58, py + ph - 2)
+          ..lineTo(px + pw * 0.68, py + ph + 10 + flameFlicker)
+          ..lineTo(px + pw * 0.78, py + ph - 2)
+          ..close(),
+        flamePaint,
+      );
 
-    // Jet body
-    final bodyPaint = Paint()..color = const Color(0xFFC0C0C0);
-    final wingPaint = Paint()..color = const Color(0xFF909090);
-    final accentPaint = Paint()..color = const Color(0xFFFF3333);
-    final glassPaint = Paint()..color = const Color(0xFF33CCFF);
+      final hullPaint = Paint()..color = const Color(0xFF4A4E69);
+      final armorPaint = Paint()..color = const Color(0xFF22223B);
+      final accentPaint = Paint()..color = const Color(0xFFFF8800);
+      final corePaint = Paint()..color = const Color(0xFFFFCC00);
 
-    // Wings
-    final wingPath = Path()
-      ..moveTo(px + pw / 2, py + ph * 0.3)
-      ..lineTo(px, py + ph * 0.8)
-      ..lineTo(px + pw * 0.2, py + ph)
-      ..lineTo(px + pw * 0.8, py + ph)
-      ..lineTo(px + pw, py + ph * 0.8)
-      ..close();
-    canvas.drawPath(wingPath, wingPaint);
+      // Heavy armor hull
+      final hullPath = Path()
+        ..moveTo(px + pw / 2, py)
+        ..lineTo(px + pw * 0.85, py + ph * 0.4)
+        ..lineTo(px + pw, py + ph)
+        ..lineTo(px + pw * 0.65, py + ph)
+        ..lineTo(px + pw / 2, py + ph * 0.8)
+        ..lineTo(px + pw * 0.35, py + ph)
+        ..lineTo(px, py + ph)
+        ..lineTo(px + pw * 0.15, py + ph * 0.4)
+        ..close();
+      canvas.drawPath(hullPath, hullPaint);
+
+      // Side armor plates
+      canvas.drawRect(Rect.fromLTWH(px + pw * 0.05, py + ph * 0.2, 4, ph * 0.7), accentPaint);
+      canvas.drawRect(Rect.fromLTWH(px + pw * 0.95 - 4, py + ph * 0.2, 4, ph * 0.7), accentPaint);
+
+      // Heavy Dual Cannons
+      canvas.drawRect(Rect.fromLTWH(px + pw * 0.16, py - 4, 4, 10), armorPaint);
+      canvas.drawRect(Rect.fromLTWH(px + pw * 0.84 - 4, py - 4, 4, 10), armorPaint);
+
+      // Core Reactor
+      canvas.drawCircle(Offset(px + pw / 2, py + ph * 0.48), 5.0, corePaint);
+
+    } else if (player.shipType == 'interceptor') {
+      // PHANTOM INTERCEPTOR (Forward swept delta wings, emerald glow, needle canopy)
+      final flamePaint = Paint()
+        ..shader = ui.Gradient.linear(
+          Offset(px + pw / 2, py + ph),
+          Offset(px + pw / 2, py + ph + 14 + flameFlicker),
+          [const Color(0xFF00FF88), Colors.transparent],
+        );
+      final flamePath = Path()
+        ..moveTo(px + pw * 0.38, py + ph - 2)
+        ..lineTo(px + pw / 2, py + ph + 14 + flameFlicker)
+        ..lineTo(px + pw * 0.62, py + ph - 2)
+        ..close();
+      canvas.drawPath(flamePath, flamePaint);
+
+      final bodyPaint = Paint()..color = const Color(0xFF1E293B);
+      final wingPaint = Paint()..color = const Color(0xFF334155);
+      final accentPaint = Paint()..color = const Color(0xFF00FF88);
+      final canopyPaint = Paint()..color = const Color(0xFF00FFFF);
+
+      // Forward-swept wings
+      final wingPath = Path()
+        ..moveTo(px + pw / 2, py + ph * 0.45)
+        ..lineTo(px, py + ph * 0.15) // Swept forward!
+        ..lineTo(px + pw * 0.18, py + ph)
+        ..lineTo(px + pw * 0.82, py + ph)
+        ..lineTo(px + pw, py + ph * 0.15)
+        ..close();
+      canvas.drawPath(wingPath, wingPaint);
+
+      // Wing glow streaks
+      canvas.drawLine(
+        Offset(px, py + ph * 0.15),
+        Offset(px + pw * 0.18, py + ph),
+        Paint()..color = accentPaint.color..strokeWidth = 2.0,
+      );
+      canvas.drawLine(
+        Offset(px + pw, py + ph * 0.15),
+        Offset(px + pw * 0.82, py + ph),
+        Paint()..color = accentPaint.color..strokeWidth = 2.0,
+      );
+
+      // Needle fuselage
+      final fusePath = Path()
+        ..moveTo(px + pw / 2, py - 4)
+        ..lineTo(px + pw * 0.35, py + ph)
+        ..lineTo(px + pw * 0.65, py + ph)
+        ..close();
+      canvas.drawPath(fusePath, bodyPaint);
+
+      // Cockpit
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: Offset(px + pw / 2, py + ph * 0.4),
+          width: 5,
+          height: 12,
+        ),
+        canopyPaint,
+      );
+
+    } else {
+      // F-22 STARFIGHTER (Standard Balanced Jet)
+      final flamePaint = Paint()
+        ..shader = ui.Gradient.linear(
+          Offset(px + pw / 2, py + ph),
+          Offset(px + pw / 2, py + ph + 10 + flameFlicker),
+          [Colors.yellow, Colors.red.withValues(alpha: 0.0)],
+        );
+      final flamePath = Path()
+        ..moveTo(px + pw * 0.35, py + ph - 2)
+        ..lineTo(px + pw / 2, py + ph + 10 + flameFlicker)
+        ..lineTo(px + pw * 0.65, py + ph - 2)
+        ..close();
+      canvas.drawPath(flamePath, flamePaint);
+
+      final bodyPaint = Paint()..color = const Color(0xFFC0C0C0);
+      final wingPaint = Paint()..color = const Color(0xFF909090);
+      final accentPaint = Paint()..color = const Color(0xFFFF3333);
+      final glassPaint = Paint()..color = const Color(0xFF33CCFF);
+
+      // Wings
+      final wingPath = Path()
+        ..moveTo(px + pw / 2, py + ph * 0.3)
+        ..lineTo(px, py + ph * 0.8)
+        ..lineTo(px + pw * 0.2, py + ph)
+        ..lineTo(px + pw * 0.8, py + ph)
+        ..lineTo(px + pw, py + ph * 0.8)
+        ..close();
+      canvas.drawPath(wingPath, wingPaint);
+      
+      // Wing accents
+      canvas.drawPath(Path()..moveTo(px, py + ph * 0.8)..lineTo(px + pw * 0.1, py + ph * 0.8)..lineTo(px + pw * 0.2, py + ph)..lineTo(px + pw * 0.05, py + ph)..close(), accentPaint);
+      canvas.drawPath(Path()..moveTo(px + pw, py + ph * 0.8)..lineTo(px + pw * 0.9, py + ph * 0.8)..lineTo(px + pw * 0.8, py + ph)..lineTo(px + pw * 0.95, py + ph)..close(), accentPaint);
+
+      // Main fuselage
+      final fuselagePath = Path()
+        ..moveTo(px + pw / 2, py)
+        ..lineTo(px + pw * 0.35, py + ph)
+        ..lineTo(px + pw * 0.65, py + ph)
+        ..close();
+      canvas.drawPath(fuselagePath, bodyPaint);
+
+      // Cockpit
+      final cockpitPath = Path()
+        ..moveTo(px + pw / 2, py + ph * 0.2)
+        ..lineTo(px + pw * 0.42, py + ph * 0.5)
+        ..lineTo(px + pw * 0.58, py + ph * 0.5)
+        ..close();
+      canvas.drawPath(cockpitPath, glassPaint);
+    }
+
+    // Ship Health Bar (Beneath ship)
+    final double hpRatio = (player.hp / player.maxHp).clamp(0.0, 1.0);
+    final hpColor = hpRatio > 0.5
+        ? const Color(0xFF00FF88)
+        : (hpRatio > 0.25 ? const Color(0xFFFFCC00) : const Color(0xFFFF3333));
     
-    // Wing accents
-    canvas.drawPath(Path()..moveTo(px, py + ph * 0.8)..lineTo(px + pw * 0.1, py + ph * 0.8)..lineTo(px + pw * 0.2, py + ph)..lineTo(px + pw * 0.05, py + ph)..close(), accentPaint);
-    canvas.drawPath(Path()..moveTo(px + pw, py + ph * 0.8)..lineTo(px + pw * 0.9, py + ph * 0.8)..lineTo(px + pw * 0.8, py + ph)..lineTo(px + pw * 0.95, py + ph)..close(), accentPaint);
-
-    // Main fuselage
-    final fuselagePath = Path()
-      ..moveTo(px + pw / 2, py)
-      ..lineTo(px + pw * 0.35, py + ph)
-      ..lineTo(px + pw * 0.65, py + ph)
-      ..close();
-    canvas.drawPath(fuselagePath, bodyPaint);
-
-    // Cockpit
-    final cockpitPath = Path()
-      ..moveTo(px + pw / 2, py + ph * 0.2)
-      ..lineTo(px + pw * 0.42, py + ph * 0.5)
-      ..lineTo(px + pw * 0.58, py + ph * 0.5)
-      ..close();
-    canvas.drawPath(cockpitPath, glassPaint);
+    final hpBgPaint = Paint()
+      ..color = Colors.black.withValues(alpha: 0.6)
+      ..style = PaintingStyle.fill;
+    final hpFillPaint = Paint()
+      ..color = hpColor
+      ..style = PaintingStyle.fill;
+    
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(px, py + ph + 16, pw, 3.5),
+        const Radius.circular(2),
+      ),
+      hpBgPaint,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(px, py + ph + 16, pw * hpRatio, 3.5),
+        const Radius.circular(2),
+      ),
+      hpFillPaint,
+    );
 
     // 4. Draw Bullets (Red Rectangles)
     final bulletPaint = Paint()
@@ -1528,18 +2101,23 @@ class GamePainter extends CustomPainter {
     // Left HUD items
     const double startX = 12.0;
     final double hitRate = bulletsShot > 0 ? (hits / bulletsShot) * 100.0 : 0.0;
+    final double hpRatio = (player.hp / player.maxHp).clamp(0.0, 1.0);
+    final Color hpColor = hpRatio > 0.5
+        ? const Color(0xFF00FF88)
+        : (hpRatio > 0.25 ? const Color(0xFFFFCC00) : const Color(0xFFFF3333));
 
     _drawText(
       canvas: canvas,
-      text: 'Hit Rate: ${hitRate.toStringAsFixed(1)}%',
+      text: 'Hull: ${player.hp}/${player.maxHp} HP',
       x: startX,
       y: 16.0,
-      color: Colors.white,
+      color: hpColor,
       fontSize: 15.0,
+      bold: true,
     );
     _drawText(
       canvas: canvas,
-      text: 'Shots: $bulletsShot',
+      text: 'Hit Rate: ${hitRate.toStringAsFixed(1)}%',
       x: startX,
       y: 36.0,
       color: Colors.white,
@@ -1547,7 +2125,7 @@ class GamePainter extends CustomPainter {
     );
     _drawText(
       canvas: canvas,
-      text: 'Hits: $hits',
+      text: 'Shots: $bulletsShot',
       x: startX,
       y: 56.0,
       color: Colors.white,
@@ -1555,9 +2133,17 @@ class GamePainter extends CustomPainter {
     );
     _drawText(
       canvas: canvas,
-      text: 'Coins: $coinsCollected',
+      text: 'Hits: $hits',
       x: startX,
       y: 76.0,
+      color: Colors.white,
+      fontSize: 14.0,
+    );
+    _drawText(
+      canvas: canvas,
+      text: 'Coins: $coinsCollected',
+      x: startX,
+      y: 96.0,
       color: Colors.white,
       fontSize: 14.0,
     );
@@ -1567,7 +2153,7 @@ class GamePainter extends CustomPainter {
         canvas: canvas,
         text: 'Boss HP: ${boss!.hp}',
         x: startX,
-        y: 96.0,
+        y: 116.0,
         color: Colors.redAccent,
         fontSize: 14.0,
         bold: true,
@@ -1584,7 +2170,7 @@ class GamePainter extends CustomPainter {
       canvas: canvas,
       text: 'Weapon: $weaponStatus',
       x: startX,
-      y: boss != null ? 116.0 : 96.0,
+      y: boss != null ? 136.0 : 116.0,
       color: const Color(0xFF9BE7FF),
       fontSize: 14.0,
     );

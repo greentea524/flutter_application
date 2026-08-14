@@ -778,17 +778,49 @@ class _PacmanArcadeScreenState extends State<PacmanArcadeScreen> {
         key == LogicalKeyboardKey.keyD;
   }
 
-  void _setPadDirectionState(Point<int> direction, bool isPressed) {
+  void _onJoystickChanged(Offset offset) {
     if (_isGameOver) return;
 
     setState(() {
-      if (isPressed) {
-        _lastInputDirection = direction;
+      if (offset == Offset.zero) {
+        _leftPressed = false;
+        _rightPressed = false;
+        _upPressed = false;
+        _downPressed = false;
+      } else {
+        final double dx = offset.dx;
+        final double dy = offset.dy;
+
+        if (dx.abs() > dy.abs()) {
+          if (dx > 0) {
+            _lastInputDirection = const Point<int>(1, 0);
+            _rightPressed = true;
+            _leftPressed = false;
+            _upPressed = false;
+            _downPressed = false;
+          } else {
+            _lastInputDirection = const Point<int>(-1, 0);
+            _leftPressed = true;
+            _rightPressed = false;
+            _upPressed = false;
+            _downPressed = false;
+          }
+        } else {
+          if (dy > 0) {
+            _lastInputDirection = const Point<int>(0, 1);
+            _downPressed = true;
+            _upPressed = false;
+            _leftPressed = false;
+            _rightPressed = false;
+          } else {
+            _lastInputDirection = const Point<int>(0, -1);
+            _upPressed = true;
+            _downPressed = false;
+            _leftPressed = false;
+            _rightPressed = false;
+          }
+        }
       }
-      if (direction.x < 0) _leftPressed = isPressed;
-      if (direction.x > 0) _rightPressed = isPressed;
-      if (direction.y < 0) _upPressed = isPressed;
-      if (direction.y > 0) _downPressed = isPressed;
       _updateMoveInputFromControls();
     });
   }
@@ -955,7 +987,7 @@ class _PacmanArcadeScreenState extends State<PacmanArcadeScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _DirectionPad(onDirectionStateChanged: _setPadDirectionState),
+                  _VirtualJoystick(onJoystickChanged: _onJoystickChanged),
                 ],
               ),
             ),
@@ -1210,47 +1242,172 @@ class _PacmanBoardPainter extends CustomPainter {
   }
 }
 
-class _DirectionPad extends StatelessWidget {
-  const _DirectionPad({required this.onDirectionStateChanged});
+class _VirtualJoystick extends StatefulWidget {
+  const _VirtualJoystick({required this.onJoystickChanged});
 
-  final void Function(Point<int> direction, bool isPressed)
-  onDirectionStateChanged;
+  final ValueChanged<Offset> onJoystickChanged;
+
+  @override
+  State<_VirtualJoystick> createState() => _VirtualJoystickState();
+}
+
+class _VirtualJoystickState extends State<_VirtualJoystick> {
+  Offset _dragOffset = Offset.zero;
+  static const double _baseRadius = 65.0;
+  static const double _knobRadius = 26.0;
+  static const double _maxDistance = 42.0;
+  static const double _deadzone = 8.0;
+
+  void _handleDrag(Offset localPosition) {
+    const Offset center = Offset(_baseRadius, _baseRadius);
+    Offset delta = localPosition - center;
+    final double distance = delta.distance;
+
+    if (distance > _maxDistance) {
+      delta = Offset.fromDirection(delta.direction, _maxDistance);
+    }
+
+    setState(() {
+      _dragOffset = delta;
+    });
+
+    if (delta.distance < _deadzone) {
+      widget.onJoystickChanged(Offset.zero);
+    } else {
+      widget.onJoystickChanged(delta);
+    }
+  }
+
+  void _handleDragEnd() {
+    setState(() {
+      _dragOffset = Offset.zero;
+    });
+    widget.onJoystickChanged(Offset.zero);
+  }
 
   @override
   Widget build(BuildContext context) {
-    Widget button(IconData icon, Point<int> direction) {
-      return GestureDetector(
-        onTapDown: (_) => onDirectionStateChanged(direction, true),
-        onTapUp: (_) => onDirectionStateChanged(direction, false),
-        onTapCancel: () => onDirectionStateChanged(direction, false),
-        child: Container(
-          width: 66,
-          height: 66,
-          decoration: BoxDecoration(
-            color: const Color(0x44333D5E),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0x5586A7E6)),
-          ),
-          child: Icon(icon, color: Colors.white, size: 30),
-        ),
-      );
-    }
+    final bool isLeft = _dragOffset.distance >= _deadzone &&
+        _dragOffset.dx.abs() > _dragOffset.dy.abs() &&
+        _dragOffset.dx < 0;
+    final bool isRight = _dragOffset.distance >= _deadzone &&
+        _dragOffset.dx.abs() > _dragOffset.dy.abs() &&
+        _dragOffset.dx > 0;
+    final bool isUp = _dragOffset.distance >= _deadzone &&
+        _dragOffset.dy.abs() >= _dragOffset.dx.abs() &&
+        _dragOffset.dy < 0;
+    final bool isDown = _dragOffset.distance >= _deadzone &&
+        _dragOffset.dy.abs() >= _dragOffset.dx.abs() &&
+        _dragOffset.dy > 0;
 
-    return Column(
-      children: [
-        button(Icons.keyboard_arrow_up, const Point<int>(0, -1)),
-        const SizedBox(height: 8),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            button(Icons.keyboard_arrow_left, const Point<int>(-1, 0)),
-            const SizedBox(width: 8),
-            button(Icons.keyboard_arrow_down, const Point<int>(0, 1)),
-            const SizedBox(width: 8),
-            button(Icons.keyboard_arrow_right, const Point<int>(1, 0)),
-          ],
+    return Center(
+      child: GestureDetector(
+        onPanStart: (details) => _handleDrag(details.localPosition),
+        onPanUpdate: (details) => _handleDrag(details.localPosition),
+        onPanEnd: (_) => _handleDragEnd(),
+        onPanCancel: () => _handleDragEnd(),
+        child: SizedBox(
+          width: _baseRadius * 2,
+          height: _baseRadius * 2,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Outer Base Ring
+              Container(
+                width: _baseRadius * 2,
+                height: _baseRadius * 2,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const RadialGradient(
+                    colors: [Color(0x22112A60), Color(0x550F1F47)],
+                  ),
+                  border: Border.all(
+                    color: const Color(0xFF3366CC).withValues(alpha: 0.6),
+                    width: 2.5,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF2255BB).withValues(alpha: 0.25),
+                      blurRadius: 16,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+              ),
+
+              // Directional arrow markers
+              Positioned(
+                top: 6,
+                child: Icon(
+                  Icons.arrow_drop_up,
+                  size: 24,
+                  color: isUp ? const Color(0xFFFFE34D) : const Color(0x668EA6D8),
+                ),
+              ),
+              Positioned(
+                bottom: 6,
+                child: Icon(
+                  Icons.arrow_drop_down,
+                  size: 24,
+                  color: isDown ? const Color(0xFFFFE34D) : const Color(0x668EA6D8),
+                ),
+              ),
+              Positioned(
+                left: 6,
+                child: Icon(
+                  Icons.arrow_left,
+                  size: 24,
+                  color: isLeft ? const Color(0xFFFFE34D) : const Color(0x668EA6D8),
+                ),
+              ),
+              Positioned(
+                right: 6,
+                child: Icon(
+                  Icons.arrow_right,
+                  size: 24,
+                  color: isRight ? const Color(0xFFFFE34D) : const Color(0x668EA6D8),
+                ),
+              ),
+
+              // Inner movable knob
+              Transform.translate(
+                offset: _dragOffset,
+                child: Container(
+                  width: _knobRadius * 2,
+                  height: _knobRadius * 2,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: const RadialGradient(
+                      colors: [Color(0xFF5588FF), Color(0xFF1E3C80)],
+                    ),
+                    border: Border.all(
+                      color: const Color(0xFF88BBFF),
+                      width: 2,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF3377FF).withValues(alpha: 0.5),
+                        blurRadius: 10,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                  child: Center(
+                    child: Container(
+                      width: 12,
+                      height: 12,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Color(0xFFFFE34D),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
-      ],
+      ),
     );
   }
 }

@@ -90,8 +90,10 @@ class _WordleScreenState extends State<WordleScreen>
   void _saveCurrentSeed() {
     if (kTargetWords.isEmpty) return;
 
-    localStorage.setItem(_wordSeedDayKey, _todayKey());
-    localStorage.setItem(_wordSeedIndexKey, _currentWordIndex().toString());
+    try {
+      localStorage.setItem(_wordSeedDayKey, _todayKey());
+      localStorage.setItem(_wordSeedIndexKey, _currentWordIndex().toString());
+    } catch (_) {}
   }
 
   void _setInitialWordShift() {
@@ -100,26 +102,34 @@ class _WordleScreenState extends State<WordleScreen>
       return;
     }
 
-    final storedDay = localStorage.getItem(_wordSeedDayKey);
-    final storedIndex = int.tryParse(
-      localStorage.getItem(_wordSeedIndexKey) ?? '',
-    );
+    try {
+      final storedDay = localStorage.getItem(_wordSeedDayKey);
+      final storedIndex = int.tryParse(
+        localStorage.getItem(_wordSeedIndexKey) ?? '',
+      );
 
-    if (storedDay == _todayKey() &&
-        storedIndex != null &&
-        storedIndex >= 0 &&
-        storedIndex < kTargetWords.length) {
-      _setWordShiftFromIndex(storedIndex);
-      return;
-    }
+      if (storedDay == _todayKey() &&
+          storedIndex != null &&
+          storedIndex >= 0 &&
+          storedIndex < kTargetWords.length) {
+        _setWordShiftFromIndex(storedIndex);
+        return;
+      }
+    } catch (_) {}
 
     _setWordShiftFromIndex(math.Random().nextInt(kTargetWords.length));
   }
 
-  void _initGame() {
+  void _initGame({bool forceRandom = true}) {
     if (kTargetWords.isEmpty) return;
 
-    // Pick a target word based on the day (same as original JS logic)
+    if (forceRandom) {
+      final random = math.Random();
+      int newIndex = random.nextInt(kTargetWords.length);
+      _setWordShiftFromIndex(newIndex);
+    }
+
+    // Pick target word
     final wordIndex = _currentWordIndex();
     _targetWord = kTargetWords[wordIndex];
     _saveCurrentSeed();
@@ -251,6 +261,9 @@ class _WordleScreenState extends State<WordleScreen>
       _currentCol++;
     });
     _showAlert('1 letter revealed');
+    if (_currentCol == wordLength) {
+      _submitGuess();
+    }
   }
 
   void _revealFullWordHint() {
@@ -264,6 +277,7 @@ class _WordleScreenState extends State<WordleScreen>
       _currentCol = wordLength;
     });
     _showAlert('Full word revealed');
+    _submitGuess();
   }
 
   void _resetGameWithRandomWord() {
@@ -356,6 +370,10 @@ class _WordleScreenState extends State<WordleScreen>
       _tileStates[_currentRow][_currentCol] = TileState.active;
       _currentCol++;
     });
+
+    if (_currentCol == wordLength) {
+      _submitGuess();
+    }
   }
 
   void _deleteKey() {
