@@ -98,7 +98,6 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
   static const double alienWidth = 30.0;
   static const double alienHeight = 20.0;
   static const double alienSpeed = 1.0;
-  static const int bossMaxHp = 12;
   static const double powerUpSize = 16.0;
   static const double powerUpSpeed = 2.0;
   static const double powerUpDropChance = 0.15;
@@ -116,7 +115,9 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
   late GamePlayer player;
   final List<GameBullet> bullets = [];
   final List<GameAlien> aliens = [];
-  GameBoss? boss;
+  final List<GameBoss> bosses = [];
+  final List<GameSpawnling> spawnlings = [];
+  final List<GameInkShot> inkShots = [];
   final List<GameParticle> particles = [];
   final List<GamePowerUp> powerUps = [];
   final List<GameCoin> coins = [];
@@ -277,7 +278,9 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
 
     bullets.clear();
     aliens.clear();
-    boss = null;
+    bosses.clear();
+    spawnlings.clear();
+    inkShots.clear();
     particles.clear();
     powerUps.clear();
     coins.clear();
@@ -339,6 +342,8 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
 
   void _createAliens() {
     aliens.clear();
+    spawnlings.clear();
+    inkShots.clear();
     const double sidePadding = 30.0;
     const double gap = 20.0;
     const double step = alienWidth + gap;
@@ -359,14 +364,93 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
   }
 
   void _createBoss() {
-    const double bossWidth = 90.0;
-    final int bossHue = _random.nextInt(360);
+    bosses.clear();
+    spawnlings.clear();
+    inkShots.clear();
 
-    boss = GameBoss(
-      x: logicalWidth / 2 - bossWidth / 2,
-      y: 8.0,
-      hp: bossMaxHp,
-      maxHp: bossMaxHp,
+    const bossTypes = [
+      BossType.octopus,
+      BossType.mothership,
+      BossType.lasercore,
+      BossType.hive,
+    ];
+    final type = bossTypes[(waveNumber - 1) % bossTypes.length];
+    bosses.add(_makeBoss(type, id: 'w$waveNumber-boss'));
+  }
+
+  GameBoss _makeBoss(
+    BossType type, {
+    required String id,
+    double? x,
+    double? y,
+    int? hp,
+    int gen = 0,
+    double dir = 1.0,
+    double sizeMul = 1.0,
+  }) {
+    final int bossHue = _random.nextInt(360);
+    final double hpMulti = 1.0 + (waveNumber - 1) * 0.2;
+    final double speedMulti = 1.0 + (waveNumber - 1) * 0.1;
+    final double attackRateMulti = 1.0 + (waveNumber - 1) * 0.1;
+
+    double baseWidth;
+    double baseHeight;
+    int baseHp;
+    double baseSpeed;
+    int baseSpawnT;
+
+    switch (type) {
+      case BossType.octopus:
+        baseWidth = 90.0;
+        baseHeight = 30.0;
+        baseHp = 12;
+        baseSpeed = 1.5;
+        baseSpawnT = 170;
+        break;
+      case BossType.mothership:
+        baseWidth = 130.0;
+        baseHeight = 34.0;
+        baseHp = 28;
+        baseSpeed = 0.8;
+        baseSpawnT = 150;
+        break;
+      case BossType.lasercore:
+        baseWidth = 70.0;
+        baseHeight = 46.0;
+        baseHp = 16;
+        baseSpeed = 1.2;
+        baseSpawnT = 150;
+        break;
+      case BossType.hive:
+        baseWidth = 84.0;
+        baseHeight = 42.0;
+        baseHp = 12;
+        baseSpeed = 1.2;
+        baseSpawnT = 150;
+        break;
+    }
+
+    final double width = baseWidth * sizeMul;
+    final double height = baseHeight * sizeMul;
+    final int scaledHp = hp ?? math.max(1, (baseHp * hpMulti).floor());
+    final double scaledSpeed = baseSpeed * speedMulti;
+
+    return GameBoss(
+      id: id,
+      type: type,
+      x: x ?? (logicalWidth / 2 - width / 2),
+      y: y ?? 8.0,
+      width: width,
+      height: height,
+      hp: scaledHp,
+      maxHp: scaledHp,
+      speed: scaledSpeed,
+      dir: dir,
+      gen: gen,
+      phase: 'move',
+      phaseT: math.max(10, (150 / attackRateMulti).floor()),
+      spawnT: math.max(10, (baseSpawnT / attackRateMulti).floor()),
+      wobbleT: _random.nextDouble() * math.pi * 2,
       bodyColor: HSVColor.fromAHSV(
         1.0,
         bossHue.toDouble(),
@@ -386,6 +470,103 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
         0.32,
       ).toColor(),
     );
+  }
+
+  void _spawnKamikaze(GameBoss boss) {
+    spawnlings.add(
+      GameSpawnling(
+        x: boss.x + boss.width / 2 - 9.0,
+        y: boss.y + boss.height,
+        width: 18.0,
+        height: 16.0,
+        vy: 2.2,
+      ),
+    );
+  }
+
+  void _spawnInk(GameBoss boss) {
+    final double cx = boss.x + boss.width / 2;
+    final double targetX = player.x + player.width / 2;
+    final double dx = ((targetX - cx) / 80.0).clamp(-1.5, 1.5);
+    inkShots.add(
+      GameInkShot(
+        x: cx,
+        y: boss.y + boss.height * 0.7,
+        r: 8.0,
+        vx: dx,
+        vy: 2.1,
+      ),
+    );
+  }
+
+  void _killBoss(int index) {
+    if (index >= bosses.length) return;
+    final boss = bosses[index];
+    final double cx = boss.x + boss.width / 2;
+    final double cy = boss.y + boss.height / 2;
+
+    _playAlertSound();
+    _createFireworks(cx, cy);
+    _createFireworks(cx + 10, cy);
+    flashOpacity = 0.6;
+    HapticFeedback.vibrate();
+
+    int scoreBonus;
+    switch (boss.type) {
+      case BossType.octopus:
+        scoreBonus = 120;
+        break;
+      case BossType.mothership:
+        scoreBonus = 250;
+        break;
+      case BossType.lasercore:
+        scoreBonus = 180;
+        break;
+      case BossType.hive:
+        const hiveGenScores = [60, 40, 25];
+        scoreBonus = hiveGenScores[boss.gen.clamp(0, 2)];
+        break;
+    }
+
+    _addScore(scoreBonus, cx, cy, const Color(0xFF7AF58F));
+    bosses.removeAt(index);
+
+    // Swarm Hive split behavior
+    if (boss.type == BossType.hive && boss.gen < 2) {
+      final int nextGen = boss.gen + 1;
+      final int childHp = math.max(1, (boss.maxHp / 2).round());
+      final double sizeMul = math.pow(0.65, nextGen).toDouble();
+      final double childW = 84.0 * sizeMul;
+
+      int childIdx = 0;
+      for (final dir in [-1.0, 1.0]) {
+        final child = _makeBoss(
+          BossType.hive,
+          id: '${boss.id}.${childIdx++}',
+          gen: nextGen,
+          hp: childHp,
+          dir: dir,
+          sizeMul: sizeMul,
+          x: (cx + dir * boss.width * 0.35 - childW / 2).clamp(
+            0.0,
+            logicalWidth - childW,
+          ),
+          y: boss.y + boss.height * 0.15,
+        );
+        bosses.add(child);
+        _createFireworks(child.x + child.width / 2, child.y + child.height / 2);
+      }
+
+      scorePopups.add(
+        GameScorePopup(
+          x: cx,
+          y: cy - 14,
+          text: 'SPLIT!',
+          life: 40,
+          color: const Color(0xFF8AFF8A),
+        ),
+      );
+    }
   }
 
   void _onTick(Duration elapsed) {
@@ -476,7 +657,7 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
       }
     }
 
-    // Update aliens & boss movement
+    // Update aliens movement
     bool hitEdge = false;
 
     for (int i = aliens.length - 1; i >= 0; i--) {
@@ -492,33 +673,169 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
       }
     }
 
-    if (boss != null) {
-      boss!.x += alienSpeed * 0.7 * alienDirection;
-      if (boss!.x + boss!.width > logicalWidth || boss!.x < 0) {
-        hitEdge = true;
-      }
-      if (boss!.y + boss!.height > currentHeight - player.height - 20) {
-        _damagePlayer(40);
-        boss!.y = 10.0;
-      }
-    }
-
     if (hitEdge) {
       alienDirection *= -1;
       for (final alien in aliens) {
         alien.y += 20;
       }
-      if (boss != null) {
-        boss!.y += 12;
+    }
+
+    // Update Bosses
+    for (int bIdx = bosses.length - 1; bIdx >= 0; bIdx--) {
+      if (bIdx >= bosses.length) continue;
+      final boss = bosses[bIdx];
+      bool moving = true;
+
+      if (boss.type == BossType.lasercore) {
+        boss.phaseT--;
+        if (boss.phaseT <= 0) {
+          final double attackRateMulti = 1.0 + (waveNumber - 1) * 0.1;
+          if (boss.phase == 'move') {
+            boss.phase = 'charging';
+            boss.phaseT = math.max(10, (70 / attackRateMulti).floor());
+          } else if (boss.phase == 'charging') {
+            boss.phase = 'firing';
+            boss.phaseT = math.max(10, (50 / attackRateMulti).floor());
+            _playAlertSound();
+            HapticFeedback.mediumImpact();
+          } else {
+            boss.phase = 'move';
+            boss.phaseT = math.max(10, (150 / attackRateMulti).floor());
+          }
+        }
+        moving = boss.phase == 'move';
+
+        // Damage player if caught in beam
+        if (boss.phase == 'firing') {
+          final double cx = boss.x + boss.width / 2;
+          final double halfW = boss.width * 0.45;
+          final double beamLeft = cx - halfW;
+          final double beamRight = cx + halfW;
+          final double beamTop = boss.y + boss.height;
+
+          if (player.x < beamRight &&
+              player.x + player.width > beamLeft &&
+              player.y + player.height > beamTop) {
+            _damagePlayer(2);
+          }
+        }
+      } else if (boss.type == BossType.mothership) {
+        boss.spawnT--;
+        if (boss.spawnT <= 0 && spawnlings.length < 4) {
+          final double attackRateMulti = 1.0 + (waveNumber - 1) * 0.1;
+          boss.spawnT = math.max(10, (150 / attackRateMulti).floor());
+          _spawnKamikaze(boss);
+        }
+      } else if (boss.type == BossType.octopus) {
+        boss.spawnT--;
+        if (boss.spawnT <= 0) {
+          final double attackRateMulti = 1.0 + (waveNumber - 1) * 0.1;
+          boss.spawnT = math.max(10, (170 / attackRateMulti).floor());
+          _spawnInk(boss);
+        }
+      } else if (boss.type == BossType.hive) {
+        boss.wobbleT += 0.08 + boss.gen * 0.03;
+      }
+
+      if (moving) {
+        final double speed = boss.type == BossType.hive
+            ? [1.2, 2.0, 2.8][boss.gen.clamp(0, 2)]
+            : boss.speed;
+        boss.x += alienSpeed * speed * boss.dir;
+        if (boss.x + boss.width > logicalWidth) {
+          boss.x = logicalWidth - boss.width;
+          boss.dir = -1.0;
+        } else if (boss.x < 0) {
+          boss.x = 0;
+          boss.dir = 1.0;
+        }
+      }
+
+      if (boss.y + boss.height > currentHeight - player.height - 20) {
+        _damagePlayer(40);
+        boss.y = 10.0;
       }
     }
 
-    // Collision detection: Bullets vs Aliens & Boss
+    // Update Spawnlings (Kamikaze daggers)
+    for (int i = spawnlings.length - 1; i >= 0; i--) {
+      final s = spawnlings[i];
+      s.y += s.vy;
+      if (s.x < player.x + player.width &&
+          s.x + s.width > player.x &&
+          s.y < player.y + player.height &&
+          s.y + s.height > player.y) {
+        _damagePlayer(15);
+        _createFireworks(s.x, s.y);
+        spawnlings.removeAt(i);
+      } else if (s.y > currentHeight) {
+        spawnlings.removeAt(i);
+      }
+    }
+
+    // Update Ink Shots
+    for (int i = inkShots.length - 1; i >= 0; i--) {
+      final ink = inkShots[i];
+      ink.x += ink.vx;
+      ink.y += ink.vy;
+      ink.wobbleT += 0.1;
+      if (ink.x - ink.r < player.x + player.width &&
+          ink.x + ink.r > player.x &&
+          ink.y - ink.r < player.y + player.height &&
+          ink.y + ink.r > player.y) {
+        _damagePlayer(10);
+        _createFireworks(ink.x, ink.y);
+        inkShots.removeAt(i);
+      } else if (ink.y - ink.r > currentHeight || ink.x < 0 || ink.x > logicalWidth) {
+        inkShots.removeAt(i);
+      }
+    }
+
+    // Collision detection: Bullets vs Aliens, Bosses, Spawnlings, InkShots
     for (int bIndex = bullets.length - 1; bIndex >= 0; bIndex--) {
       if (bIndex >= bullets.length) continue;
       final bullet = bullets[bIndex];
-      bool hitAlien = false;
+      bool bulletConsumed = false;
 
+      // 1. Bullets vs Spawnlings
+      for (int sIdx = spawnlings.length - 1; sIdx >= 0; sIdx--) {
+        final s = spawnlings[sIdx];
+        if (bullet.x < s.x + s.width &&
+            bullet.x + bulletWidth > s.x &&
+            bullet.y < s.y + s.height &&
+            bullet.y + bulletHeight > s.y) {
+          _playClickSound();
+          _createFireworks(s.x, s.y);
+          spawnlings.removeAt(sIdx);
+          bullets.removeAt(bIndex);
+          hits++;
+          _addScore(15, s.x, s.y, const Color(0xFFFFB46B));
+          bulletConsumed = true;
+          break;
+        }
+      }
+      if (bulletConsumed || bIndex >= bullets.length) continue;
+
+      // 2. Bullets vs InkShots
+      for (int inkIdx = inkShots.length - 1; inkIdx >= 0; inkIdx--) {
+        final ink = inkShots[inkIdx];
+        if (bullet.x < ink.x + ink.r &&
+            bullet.x + bulletWidth > ink.x - ink.r &&
+            bullet.y < ink.y + ink.r &&
+            bullet.y + bulletHeight > ink.y - ink.r) {
+          _playClickSound();
+          _createFireworks(ink.x, ink.y);
+          inkShots.removeAt(inkIdx);
+          bullets.removeAt(bIndex);
+          hits++;
+          _addScore(10, ink.x, ink.y, const Color(0xFFBA8FFF));
+          bulletConsumed = true;
+          break;
+        }
+      }
+      if (bulletConsumed || bIndex >= bullets.length) continue;
+
+      // 3. Bullets vs Aliens
       for (int aIndex = aliens.length - 1; aIndex >= 0; aIndex--) {
         final alien = aliens[aIndex];
         if (bullet.x < alien.x + alien.width &&
@@ -553,16 +870,16 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
             const Color(0xFFFFD54A),
           );
           hits++;
-          hitAlien = true;
+          bulletConsumed = true;
           break;
         }
       }
 
-      if (hitAlien || bIndex >= bullets.length) continue;
+      if (bulletConsumed || bIndex >= bullets.length) continue;
 
-      // Bullet vs Boss
-      if (boss != null) {
-        final b = boss!;
+      // 4. Bullets vs Bosses
+      for (int boIdx = bosses.length - 1; boIdx >= 0; boIdx--) {
+        final b = bosses[boIdx];
         if (bullet.x < b.x + b.width &&
             bullet.x + bulletWidth > b.x &&
             bullet.y < b.y + b.height &&
@@ -575,19 +892,9 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
           _addScore(5, bullet.x, bullet.y, const Color(0xFF9BE7FF));
 
           if (b.hp <= 0) {
-            _playAlertSound();
-            _createFireworks(b.x + b.width / 2, b.y + b.height / 2);
-            _createFireworks(b.x + b.width / 2 + 10, b.y + b.height / 2);
-            flashOpacity = 0.6;
-            HapticFeedback.vibrate();
-            _addScore(
-              120,
-              b.x + b.width / 2,
-              b.y + b.height / 2,
-              const Color(0xFF7AF58F),
-            );
-            boss = null;
+            _killBoss(boIdx);
           }
+          break;
         }
       }
     }
@@ -668,8 +975,8 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
       }
     }
 
-    // Start next wave if empty
-    if (aliens.isEmpty) {
+    // Start next wave if both aliens and bosses are cleared
+    if (aliens.isEmpty && bosses.isEmpty) {
       waveNumber++;
       _createAliens();
     }
@@ -932,7 +1239,9 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
                               player: player,
                               bullets: bullets,
                               aliens: aliens,
-                              boss: boss,
+                              bosses: bosses,
+                              spawnlings: spawnlings,
+                              inkShots: inkShots,
                               particles: particles,
                               powerUps: powerUps,
                               coins: coins,
@@ -1446,24 +1755,88 @@ class GameAlien {
   GameAlien(this.x, this.y);
 }
 
+enum BossType { octopus, mothership, lasercore, hive }
+
+const Map<BossType, String> kBossNames = {
+  BossType.octopus: 'Octo Commander',
+  BossType.mothership: 'The Mothership',
+  BossType.lasercore: 'The Laser Core',
+  BossType.hive: 'The Swarm Hive',
+};
+
 class GameBoss {
+  final String id;
+  final BossType type;
   double x;
   double y;
-  double width = 90.0;
-  double height = 30.0;
+  double width;
+  double height;
   int hp;
   int maxHp;
+  double speed;
+  double dir; // 1.0 or -1.0
+  int gen; // for hive splits (0, 1, 2)
+  String phase; // for lasercore: 'move', 'charging', 'firing'
+  int phaseT;
+  int spawnT;
+  double wobbleT;
   Color bodyColor;
   Color highlightColor;
   Color tentacleColor;
+
   GameBoss({
+    required this.id,
+    required this.type,
     required this.x,
     required this.y,
+    required this.width,
+    required this.height,
     required this.hp,
     required this.maxHp,
+    required this.speed,
+    this.dir = 1.0,
+    this.gen = 0,
+    this.phase = 'move',
+    this.phaseT = 150,
+    this.spawnT = 170,
+    this.wobbleT = 0.0,
     required this.bodyColor,
     required this.highlightColor,
     required this.tentacleColor,
+  });
+}
+
+class GameSpawnling {
+  double x;
+  double y;
+  double width;
+  double height;
+  double vx;
+  double vy;
+  GameSpawnling({
+    required this.x,
+    required this.y,
+    this.width = 18.0,
+    this.height = 16.0,
+    this.vx = 0.0,
+    this.vy = 2.2,
+  });
+}
+
+class GameInkShot {
+  double x;
+  double y;
+  double r;
+  double vx;
+  double vy;
+  double wobbleT;
+  GameInkShot({
+    required this.x,
+    required this.y,
+    this.r = 8.0,
+    this.vx = 0.0,
+    this.vy = 2.1,
+    this.wobbleT = 0.0,
   });
 }
 
@@ -1539,7 +1912,9 @@ class GamePainter extends CustomPainter {
   final GamePlayer player;
   final List<GameBullet> bullets;
   final List<GameAlien> aliens;
-  final GameBoss? boss;
+  final List<GameBoss> bosses;
+  final List<GameSpawnling> spawnlings;
+  final List<GameInkShot> inkShots;
   final List<GameParticle> particles;
   final List<GamePowerUp> powerUps;
   final List<GameCoin> coins;
@@ -1571,7 +1946,9 @@ class GamePainter extends CustomPainter {
     required this.player,
     required this.bullets,
     required this.aliens,
-    required this.boss,
+    required this.bosses,
+    required this.spawnlings,
+    required this.inkShots,
     required this.particles,
     required this.powerUps,
     required this.coins,
@@ -1878,108 +2255,8 @@ class GamePainter extends CustomPainter {
       canvas.drawCircle(Offset(c.x, c.y), 6.0, coinBorderPaint);
     }
 
-    // 7. Draw Boss (Giant Squid/Octopus)
-    if (boss != null) {
-      final b = boss!;
-      canvas.save();
-
-      final double cx = b.x + b.width / 2;
-      final double headRadius = b.width * 0.28;
-      final double headCenterY = b.y + b.height * 0.45;
-
-      // Head shape
-      final bossBodyPaint = Paint()
-        ..color = b.bodyColor.withValues(alpha: 0.85)
-        ..style = PaintingStyle.fill;
-      final bossBodyPath = Path();
-      bossBodyPath.addArc(
-        Rect.fromCircle(center: Offset(cx, headCenterY), radius: headRadius),
-        math.pi,
-        math.pi,
-      );
-      bossBodyPath.lineTo(b.x + b.width * 0.78, b.y + b.height * 0.72);
-      bossBodyPath.quadraticBezierTo(
-        cx,
-        b.y + b.height * 0.92,
-        b.x + b.width * 0.22,
-        b.y + b.height * 0.72,
-      );
-      bossBodyPath.close();
-      canvas.drawPath(bossBodyPath, bossBodyPaint);
-
-      // Highlight spot on head
-      final highlightPaint = Paint()
-        ..color = b.highlightColor.withValues(alpha: 0.85)
-        ..style = PaintingStyle.fill;
-      canvas.drawCircle(
-        Offset(b.x + b.width * 0.42, b.y + b.height * 0.33),
-        headRadius * 0.35,
-        highlightPaint,
-      );
-
-      // Eyes
-      final double eyeY = b.y + b.height * 0.52;
-      final double leftEyeX = b.x + b.width * 0.42;
-      final double rightEyeX = b.x + b.width * 0.58;
-      final double eyeRadius = b.width * 0.045;
-
-      final whiteEyePaint = Paint()
-        ..color = Colors.white.withValues(alpha: 0.85)
-        ..style = PaintingStyle.fill;
-      canvas.drawCircle(Offset(leftEyeX, eyeY), eyeRadius, whiteEyePaint);
-      canvas.drawCircle(Offset(rightEyeX, eyeY), eyeRadius, whiteEyePaint);
-
-      final darkEyePaint = Paint()
-        ..color = const Color(0xFF111111).withValues(alpha: 0.85)
-        ..style = PaintingStyle.fill;
-      canvas.drawCircle(Offset(leftEyeX, eyeY), eyeRadius * 0.45, darkEyePaint);
-      canvas.drawCircle(
-        Offset(rightEyeX, eyeY),
-        eyeRadius * 0.45,
-        darkEyePaint,
-      );
-
-      // Tentacles (bezier lines)
-      final tentaclePaint = Paint()
-        ..color = b.tentacleColor.withValues(alpha: 0.85)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = (b.width * 0.04).clamp(2.0, 10.0);
-
-      final double baseY = b.y + b.height * 0.72;
-      for (int i = 0; i < 6; i++) {
-        final double t = i / 5.0;
-        final double startX = b.x + b.width * (0.2 + t * 0.6);
-        final double swing = (i % 2 == 0 ? -1 : 1) * b.width * 0.05;
-
-        final tentaclePath = Path();
-        tentaclePath.moveTo(startX, baseY);
-        tentaclePath.cubicTo(
-          startX + swing,
-          baseY + b.height * 0.18,
-          startX - swing,
-          baseY + b.height * 0.3,
-          startX,
-          baseY + b.height * 0.42,
-        );
-        canvas.drawPath(tentaclePath, tentaclePaint);
-      }
-      canvas.restore();
-
-      // HP Bar above boss
-      final double hpRatio = (b.hp / b.maxHp).clamp(0.0, 1.0);
-      final hpBgPaint = Paint()
-        ..color = const Color(0xFF222222)
-        ..style = PaintingStyle.fill;
-      canvas.drawRect(Rect.fromLTWH(b.x, b.y - 8, b.width, 4), hpBgPaint);
-
-      final hpFillPaint = Paint()
-        ..color = const Color(0xFFFF4040)
-        ..style = PaintingStyle.fill;
-      canvas.drawRect(
-        Rect.fromLTWH(b.x, b.y - 8, b.width * hpRatio, 4),
-        hpFillPaint,
-      );
-    }
+    // 7. Draw Bosses, Spawnlings, and Ink Shots
+    _drawBosses(canvas);
 
     // 8. Draw Aliens (Sleek UFO design)
     for (final alien in aliens) {
@@ -2148,15 +2425,19 @@ class GamePainter extends CustomPainter {
       fontSize: 14.0,
     );
 
-    if (boss != null) {
+    final bool hasBoss = bosses.isNotEmpty;
+    if (hasBoss) {
+      final int bossTotalHp = bosses.fold(0, (sum, b) => sum + b.hp);
+      final String bossLabel = '${kBossNames[bosses.first.type] ?? "Boss"}${bosses.length > 1 ? " x${bosses.length}" : ""}';
       _drawText(
         canvas: canvas,
-        text: 'Boss HP: ${boss!.hp}',
+        text: '$bossLabel: $bossTotalHp HP',
         x: startX,
         y: 116.0,
-        color: Colors.redAccent,
+        color: const Color(0xFFFF5252),
         fontSize: 14.0,
         bold: true,
+        glowing: true,
       );
     }
 
@@ -2170,7 +2451,7 @@ class GamePainter extends CustomPainter {
       canvas: canvas,
       text: 'Weapon: $weaponStatus',
       x: startX,
-      y: boss != null ? 136.0 : 116.0,
+      y: hasBoss ? 136.0 : 116.0,
       color: const Color(0xFF9BE7FF),
       fontSize: 14.0,
     );
@@ -2179,10 +2460,493 @@ class GamePainter extends CustomPainter {
       canvas: canvas,
       text: 'Wave: $waveNumber',
       x: 800.0 - 100.0,
-      y: boss != null ? 150.0 : 130.0,
+      y: hasBoss ? 150.0 : 130.0,
       color: Colors.white70,
       fontSize: 14.0,
     );
+  }
+
+  void _drawBosses(Canvas canvas) {
+    for (final boss in bosses) {
+      if (boss.type == BossType.mothership) {
+        _drawMothership(canvas, boss);
+      } else if (boss.type == BossType.lasercore) {
+        _drawLaserCore(canvas, boss);
+      } else if (boss.type == BossType.hive) {
+        _drawHive(canvas, boss);
+      } else {
+        _drawOctopus(canvas, boss);
+      }
+
+      if (bosses.length > 1) {
+        _drawBossHpBar(canvas, boss);
+      }
+    }
+
+    _drawSpawnlings(canvas);
+    _drawInkShots(canvas);
+  }
+
+  void _drawBossHpBar(Canvas canvas, GameBoss boss) {
+    final double hpRatio = (boss.hp / boss.maxHp).clamp(0.0, 1.0);
+    final hpBgPaint = Paint()
+      ..color = const Color(0xFF222222)
+      ..style = PaintingStyle.fill;
+    canvas.drawRect(Rect.fromLTWH(boss.x, boss.y - 8, boss.width, 4), hpBgPaint);
+
+    final hpFillPaint = Paint()
+      ..color = const Color(0xFFFF4040)
+      ..style = PaintingStyle.fill;
+    canvas.drawRect(
+      Rect.fromLTWH(boss.x, boss.y - 8, boss.width * hpRatio, 4),
+      hpFillPaint,
+    );
+  }
+
+  void _drawOctopus(Canvas canvas, GameBoss b) {
+    canvas.save();
+    final double cx = b.x + b.width / 2;
+    final double headRadius = b.width * 0.28;
+    final double headCenterY = b.y + b.height * 0.45;
+
+    // Head shape
+    final bossBodyPaint = Paint()
+      ..color = b.bodyColor.withValues(alpha: 0.85)
+      ..style = PaintingStyle.fill;
+    final bossBodyPath = Path();
+    bossBodyPath.addArc(
+      Rect.fromCircle(center: Offset(cx, headCenterY), radius: headRadius),
+      math.pi,
+      math.pi,
+    );
+    bossBodyPath.lineTo(b.x + b.width * 0.78, b.y + b.height * 0.72);
+    bossBodyPath.quadraticBezierTo(
+      cx,
+      b.y + b.height * 0.92,
+      b.x + b.width * 0.22,
+      b.y + b.height * 0.72,
+    );
+    bossBodyPath.close();
+    canvas.drawPath(bossBodyPath, bossBodyPaint);
+
+    // Highlight spot on head
+    final highlightPaint = Paint()
+      ..color = b.highlightColor.withValues(alpha: 0.85)
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(
+      Offset(b.x + b.width * 0.42, b.y + b.height * 0.33),
+      headRadius * 0.35,
+      highlightPaint,
+    );
+
+    // Eyes
+    final double eyeY = b.y + b.height * 0.52;
+    final double leftEyeX = b.x + b.width * 0.42;
+    final double rightEyeX = b.x + b.width * 0.58;
+    final double eyeRadius = b.width * 0.045;
+
+    final whiteEyePaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.85)
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(Offset(leftEyeX, eyeY), eyeRadius, whiteEyePaint);
+    canvas.drawCircle(Offset(rightEyeX, eyeY), eyeRadius, whiteEyePaint);
+
+    final darkEyePaint = Paint()
+      ..color = const Color(0xFF111111).withValues(alpha: 0.85)
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(Offset(leftEyeX, eyeY), eyeRadius * 0.45, darkEyePaint);
+    canvas.drawCircle(
+      Offset(rightEyeX, eyeY),
+      eyeRadius * 0.45,
+      darkEyePaint,
+    );
+
+    // Tentacles (bezier lines)
+    final tentaclePaint = Paint()
+      ..color = b.tentacleColor.withValues(alpha: 0.85)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = (b.width * 0.04).clamp(2.0, 10.0);
+
+    final double baseY = b.y + b.height * 0.72;
+    for (int i = 0; i < 6; i++) {
+      final double t = i / 5.0;
+      final double startX = b.x + b.width * (0.2 + t * 0.6);
+      final double swing = (i % 2 == 0 ? -1 : 1) * b.width * 0.05;
+
+      final tentaclePath = Path();
+      tentaclePath.moveTo(startX, baseY);
+      tentaclePath.cubicTo(
+        startX + swing,
+        baseY + b.height * 0.18,
+        startX - swing,
+        baseY + b.height * 0.3,
+        startX,
+        baseY + b.height * 0.42,
+      );
+      canvas.drawPath(tentaclePath, tentaclePaint);
+    }
+
+    if (bosses.length == 1) {
+      _drawBossHpBar(canvas, b);
+    }
+    canvas.restore();
+  }
+
+  void _drawMothership(Canvas canvas, GameBoss b) {
+    canvas.save();
+    final double cx = b.x + b.width / 2;
+    final double cy = b.y + b.height * 0.55;
+    final double now = DateTime.now().millisecondsSinceEpoch / 1000.0;
+
+    // Metallic Hull
+    final hullPaint = Paint()
+      ..shader = ui.Gradient.linear(
+        Offset(b.x, b.y),
+        Offset(b.x, b.y + b.height),
+        [
+          const Color(0xFF8D98AD),
+          const Color(0xFF525C70),
+          const Color(0xFF2E3442),
+        ],
+        [0.0, 0.6, 1.0],
+      )
+      ..style = PaintingStyle.fill;
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(cx, cy),
+        width: b.width,
+        height: b.height * 0.84,
+      ),
+      hullPaint,
+    );
+
+    // Command dome
+    final domePaint = Paint()
+      ..color = const Color(0xFF3A4358)
+      ..style = PaintingStyle.fill;
+    canvas.drawArc(
+      Rect.fromCenter(
+        center: Offset(cx, b.y + b.height * 0.32),
+        width: b.width * 0.44,
+        height: b.height * 0.6,
+      ),
+      math.pi,
+      math.pi,
+      true,
+      domePaint,
+    );
+
+    final domeGlowPaint = Paint()
+      ..color = const Color(0x808CDCFF)
+      ..style = PaintingStyle.fill;
+    canvas.drawArc(
+      Rect.fromCenter(
+        center: Offset(cx, b.y + b.height * 0.3),
+        width: b.width * 0.26,
+        height: b.height * 0.32,
+      ),
+      math.pi,
+      math.pi,
+      true,
+      domeGlowPaint,
+    );
+
+    // Chasing rim lights
+    const int lightCount = 7;
+    for (int i = 0; i < lightCount; i++) {
+      final double t = i / (lightCount - 1);
+      final double lx = b.x + b.width * (0.12 + t * 0.76);
+      final bool on = (now * 4).floor() % lightCount == i;
+      final lightPaint = Paint()
+        ..color = on ? const Color(0xFFFFE066) : const Color(0x40FFE066)
+        ..style = PaintingStyle.fill;
+      canvas.drawCircle(
+        Offset(lx, cy + b.height * 0.18),
+        math.max(1.5, b.width * 0.012),
+        lightPaint,
+      );
+    }
+
+    // Hangar bay glow
+    final double charge = (1.0 - b.spawnT / 150.0).clamp(0.0, 1.0);
+    final hangarPaint = Paint()
+      ..color = Color.fromRGBO(255, 140, 60, (0.2 + 0.6 * charge).clamp(0.0, 1.0))
+      ..style = PaintingStyle.fill;
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(cx, b.y + b.height * 0.85),
+        width: b.width * 0.32,
+        height: b.height * 0.36,
+      ),
+      hangarPaint,
+    );
+
+    if (bosses.length == 1) {
+      _drawBossHpBar(canvas, b);
+    }
+    canvas.restore();
+  }
+
+  void _drawLaserCore(Canvas canvas, GameBoss b) {
+    canvas.save();
+    final double cx = b.x + b.width / 2;
+    final double cy = b.y + b.height / 2;
+    final bool charging = b.phase == 'charging';
+    final bool firing = b.phase == 'firing';
+    final double chargeProgress = charging ? (1.0 - b.phaseT / 70.0).clamp(0.0, 1.0) : 0.0;
+    final double now = DateTime.now().millisecondsSinceEpoch / 1000.0;
+
+    // Telegraph dashed line guide when charging
+    if (charging) {
+      final double pulse = 0.25 + 0.35 * (0.5 + 0.5 * math.sin(now * 24.0)) * chargeProgress;
+      final guidePaint = Paint()
+        ..color = Color.fromRGBO(255, 80, 120, pulse.clamp(0.1, 1.0))
+        ..strokeWidth = 2.0
+        ..style = PaintingStyle.stroke;
+      
+      double curY = b.y + b.height;
+      while (curY < logicalHeight) {
+        canvas.drawLine(
+          Offset(cx, curY),
+          Offset(cx, math.min(curY + 6.0, logicalHeight)),
+          guidePaint,
+        );
+        curY += 12.0;
+      }
+    }
+
+    // Lethal beam when firing
+    if (firing) {
+      final double halfW = b.width * 0.45;
+      final double beamLeft = cx - halfW;
+      final double beamRight = cx + halfW;
+      final double beamTop = b.y + b.height;
+
+      final beamPaint = Paint()
+        ..shader = ui.Gradient.linear(
+          Offset(beamLeft, 0),
+          Offset(beamRight, 0),
+          [
+            const Color(0x00FF3C78),
+            const Color(0xCCFF3C78),
+            const Color(0x00FF3C78),
+          ],
+          [0.0, 0.5, 1.0],
+        )
+        ..style = PaintingStyle.fill;
+      canvas.drawRect(
+        Rect.fromLTRB(beamLeft, beamTop, beamRight, logicalHeight),
+        beamPaint,
+      );
+
+      // White-hot core
+      final double coreHalf = (beamRight - beamLeft) * 0.16;
+      final corePaint = Paint()
+        ..color = Color.fromRGBO(255, 235, 245, 0.75 + 0.25 * math.sin(now * 40.0))
+        ..style = PaintingStyle.fill;
+      canvas.drawRect(
+        Rect.fromLTRB(cx - coreHalf, beamTop, cx + coreHalf, logicalHeight),
+        corePaint,
+      );
+    }
+
+    // Diamond hull
+    final diamondPath = Path()
+      ..moveTo(cx, b.y)
+      ..lineTo(b.x + b.width, cy)
+      ..lineTo(cx, b.y + b.height)
+      ..lineTo(b.x, cy)
+      ..close();
+
+    final hullPaint = Paint()
+      ..shader = ui.Gradient.linear(
+        Offset(b.x, b.y),
+        Offset(b.x, b.y + b.height),
+        [
+          const Color(0xFFE8ECF7),
+          const Color(0xFF7B87A8),
+          const Color(0xFF39415A),
+        ],
+        [0.0, 0.5, 1.0],
+      )
+      ..style = PaintingStyle.fill;
+    canvas.drawPath(diamondPath, hullPaint);
+
+    final borderPaint = Paint()
+      ..color = Colors.white38
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    canvas.drawPath(diamondPath, borderPaint);
+
+    // Glowing core
+    final double coreR = b.width * (0.1 + 0.08 * chargeProgress + (firing ? 0.1 : 0.0));
+    final double coreAlpha = firing ? 1.0 : (0.45 + 0.55 * chargeProgress);
+    final corePaint = Paint()
+      ..color = Color.fromRGBO(255, 60, 120, coreAlpha.clamp(0.0, 1.0))
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(Offset(cx, cy), coreR, corePaint);
+
+    final coreCenterPaint = Paint()
+      ..color = const Color(0xE6FFE6F0)
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(Offset(cx, cy), coreR * 0.45, coreCenterPaint);
+
+    if (bosses.length == 1) {
+      _drawBossHpBar(canvas, b);
+    }
+    canvas.restore();
+  }
+
+  void _drawHive(Canvas canvas, GameBoss b) {
+    canvas.save();
+    final double cx = b.x + b.width / 2;
+    final double cy = b.y + b.height / 2;
+    final double rx = b.width / 2;
+    final double ry = b.height / 2;
+    final double hue = (110.0 - b.gen * 18.0).clamp(0.0, 360.0);
+
+    // Wobbly perimeter polygon
+    final blobPath = Path();
+    const int segs = 14;
+    for (int i = 0; i <= segs; i++) {
+      final double a = (i / segs) * math.pi * 2;
+      final double wob = 1.0 + 0.12 * math.sin(b.wobbleT + i * 2.1);
+      final double px = cx + math.cos(a) * rx * wob;
+      final double py = cy + math.sin(a) * ry * wob;
+      if (i == 0) {
+        blobPath.moveTo(px, py);
+      } else {
+        blobPath.lineTo(px, py);
+      }
+    }
+    blobPath.close();
+
+    final blobPaint = Paint()
+      ..color = HSVColor.fromAHSV(0.92, hue, 0.65, 0.32).toColor()
+      ..style = PaintingStyle.fill;
+    canvas.drawPath(blobPath, blobPaint);
+
+    // Inner membrane & nucleus
+    final innerPaint = Paint()
+      ..color = HSVColor.fromAHSV(0.7, hue, 0.70, 0.45).toColor()
+      ..style = PaintingStyle.fill;
+    canvas.drawOval(
+      Rect.fromCenter(center: Offset(cx, cy), width: rx * 1.24, height: ry * 1.24),
+      innerPaint,
+    );
+
+    final nucleusPaint = Paint()
+      ..color = HSVColor.fromAHSV(0.9, (hue + 30.0) % 360.0, 0.80, 0.62).toColor()
+      ..style = PaintingStyle.fill;
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(
+          cx + math.sin(b.wobbleT * 0.7) * rx * 0.1,
+          cy + math.cos(b.wobbleT * 0.9) * ry * 0.1,
+        ),
+        width: rx * 0.56,
+        height: ry * 0.6,
+      ),
+      nucleusPaint,
+    );
+
+    // Drifting bubbles in goo
+    for (int i = 0; i < 3; i++) {
+      final double bx = cx + math.sin(b.wobbleT * 1.3 + i * 2.4) * rx * 0.4;
+      final double by = cy + math.cos(b.wobbleT * 1.1 + i * 1.9) * ry * 0.4;
+      final bubblePaint = Paint()
+        ..color = HSVColor.fromAHSV(0.5, (hue + 40.0) % 360.0, 0.80, 0.70).toColor()
+        ..style = PaintingStyle.fill;
+      canvas.drawCircle(Offset(bx, by), math.max(1.5, rx * 0.08), bubblePaint);
+    }
+
+    // Angry eyes
+    final eyePaint = Paint()
+      ..color = const Color(0xFF1A0F1E)
+      ..style = PaintingStyle.fill;
+    final double eyeR = math.max(1.5, rx * 0.09);
+    canvas.drawCircle(Offset(cx - rx * 0.28, cy - ry * 0.12), eyeR, eyePaint);
+    canvas.drawCircle(Offset(cx + rx * 0.28, cy - ry * 0.12), eyeR, eyePaint);
+
+    if (bosses.length == 1) {
+      _drawBossHpBar(canvas, b);
+    }
+    canvas.restore();
+  }
+
+  void _drawSpawnlings(Canvas canvas) {
+    for (final k in spawnlings) {
+      final double cx = k.x + k.width / 2;
+
+      // Exhaust flame
+      final flamePaint = Paint()
+        ..color = _random.nextBool() ? Colors.orange : const Color(0xFFFF5D5D)
+        ..style = PaintingStyle.fill;
+      final flamePath = Path()
+        ..moveTo(cx - k.width * 0.12, k.y)
+        ..lineTo(cx, k.y - _random.nextDouble() * k.height * 0.7 - 2.0)
+        ..lineTo(cx + k.width * 0.12, k.y)
+        ..close();
+      canvas.drawPath(flamePath, flamePaint);
+
+      // Downward dagger hull
+      final daggerPaint = Paint()
+        ..shader = ui.Gradient.linear(
+          Offset(k.x, k.y),
+          Offset(k.x, k.y + k.height),
+          [const Color(0xFFB8642E), const Color(0xFFFFB46B)],
+        )
+        ..style = PaintingStyle.fill;
+      final daggerPath = Path()
+        ..moveTo(cx, k.y + k.height)
+        ..lineTo(k.x + k.width, k.y + k.height * 0.25)
+        ..lineTo(cx, k.y + k.height * 0.45)
+        ..lineTo(k.x, k.y + k.height * 0.25)
+        ..close();
+      canvas.drawPath(daggerPath, daggerPaint);
+    }
+  }
+
+  void _drawInkShots(Canvas canvas) {
+    for (final ink in inkShots) {
+      final double squish = 1.0 + 0.15 * math.sin(ink.wobbleT * 2.0);
+
+      // Halo
+      final haloPaint = Paint()
+        ..color = const Color(0x999664DC)
+        ..style = PaintingStyle.fill;
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: Offset(ink.x, ink.y),
+          width: ink.r * 3.0 * squish,
+          height: (ink.r * 3.0) / squish,
+        ),
+        haloPaint,
+      );
+
+      // Core
+      final corePaint = Paint()
+        ..color = const Color(0xFF9A6DDB)
+        ..style = PaintingStyle.fill;
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: Offset(ink.x, ink.y),
+          width: ink.r * 2.0 * squish,
+          height: (ink.r * 2.0) / squish,
+        ),
+        corePaint,
+      );
+
+      // Sheen
+      final sheenPaint = Paint()
+        ..color = const Color(0xE6F0DCFF)
+        ..style = PaintingStyle.fill;
+      canvas.drawCircle(
+        Offset(ink.x - ink.r * 0.3, ink.y - ink.r * 0.3),
+        math.max(1.0, ink.r * 0.3),
+        sheenPaint,
+      );
+    }
   }
 
   void _drawText({

@@ -33,8 +33,21 @@ void main() {
     await tester.tap(launchBtn);
     await tester.pump();
 
-    // Hangar should be dismissed
+    // Hangar should be dismissed and game view active
     expect(find.text('STARFLEET HANGAR'), findsNothing);
+    expect(find.byType(AlienInvasionScreen), findsOneWidget);
+
+    // Let the ticker run a frame so painter draws
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byType(CustomPaint), findsWidgets);
+  });
+
+  test('Boss roster and names metadata verification', () {
+    expect(BossType.values.length, 4);
+    expect(kBossNames[BossType.octopus], 'Octo Commander');
+    expect(kBossNames[BossType.mothership], 'The Mothership');
+    expect(kBossNames[BossType.lasercore], 'The Laser Core');
+    expect(kBossNames[BossType.hive], 'The Swarm Hive');
   });
 
   testWidgets('Wordle automatically submits on 5th letter entered', (
