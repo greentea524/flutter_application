@@ -115,7 +115,7 @@ void main() {
     expect(achBtn, findsOneWidget);
     await tester.ensureVisible(achBtn);
     await tester.tap(achBtn);
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.text('LIFETIME ACHIEVEMENTS'), findsOneWidget);
     expect(find.text('First Blood'), findsOneWidget);
@@ -123,19 +123,19 @@ void main() {
 
     // Close modal
     await tester.tap(find.text('CLOSE'));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('LIFETIME ACHIEVEMENTS'), findsNothing);
 
     // Toggle Roguelite Galaxy mode
     final roguMode = find.text('ROGUELITE GALAXY');
     await tester.tap(roguMode);
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.text('ENTER GALAXY MAP'), findsOneWidget);
 
     // Enter Galaxy Map
     await tester.tap(find.text('ENTER GALAXY MAP'));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.text('GALAXY SECTOR 1'), findsOneWidget);
     expect(find.text('DEPLOY NOW'), findsOneWidget);
