@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -70,6 +71,249 @@ const List<ShipConfig> kShipConfigs = [
   ),
 ];
 
+// --- Lifetime Stats & Achievements Models (#6) ---
+
+class LifetimeStats {
+  int totalKills = 0;
+  int wavesCleared = 0;
+  int bestCombo = 0;
+  int maxWeaponLevel = 1;
+  int bossKills = 0;
+  int flawlessWaves = 0;
+  Set<String> shipsUsed = {};
+
+  LifetimeStats();
+
+  Map<String, dynamic> toJson() => {
+    'totalKills': totalKills,
+    'wavesCleared': wavesCleared,
+    'bestCombo': bestCombo,
+    'maxWeaponLevel': maxWeaponLevel,
+    'bossKills': bossKills,
+    'flawlessWaves': flawlessWaves,
+    'shipsUsed': shipsUsed.toList(),
+  };
+
+  factory LifetimeStats.fromJson(Map<String, dynamic>? json) {
+    final s = LifetimeStats();
+    if (json == null) return s;
+    s.totalKills = json['totalKills'] as int? ?? 0;
+    s.wavesCleared = json['wavesCleared'] as int? ?? 0;
+    s.bestCombo = json['bestCombo'] as int? ?? 0;
+    s.maxWeaponLevel = json['maxWeaponLevel'] as int? ?? 1;
+    s.bossKills = json['bossKills'] as int? ?? 0;
+    s.flawlessWaves = json['flawlessWaves'] as int? ?? 0;
+    if (json['shipsUsed'] is List) {
+      s.shipsUsed = (json['shipsUsed'] as List).map((e) => e.toString()).toSet();
+    }
+    return s;
+  }
+}
+
+class AchievementDef {
+  final String id;
+  final String name;
+  final String desc;
+  final String icon;
+  final int target;
+  final int Function(LifetimeStats) currentVal;
+
+  const AchievementDef({
+    required this.id,
+    required this.name,
+    required this.desc,
+    required this.icon,
+    required this.target,
+    required this.currentVal,
+  });
+}
+
+final List<AchievementDef> kAchievements = [
+  AchievementDef(
+    id: 'first_blood',
+    name: 'First Blood',
+    desc: 'Destroy your first alien',
+    icon: '🩸',
+    target: 1,
+    currentVal: (s) => s.totalKills,
+  ),
+  AchievementDef(
+    id: 'pest_control',
+    name: 'Pest Control',
+    desc: 'Destroy 100 enemies',
+    icon: '🔫',
+    target: 100,
+    currentVal: (s) => s.totalKills,
+  ),
+  AchievementDef(
+    id: 'exterminator',
+    name: 'Exterminator',
+    desc: 'Destroy 500 enemies',
+    icon: '☠️',
+    target: 500,
+    currentVal: (s) => s.totalKills,
+  ),
+  AchievementDef(
+    id: 'sharpshooter',
+    name: 'Sharpshooter',
+    desc: 'Land a 10-hit combo streak',
+    icon: '🎯',
+    target: 10,
+    currentVal: (s) => s.bestCombo,
+  ),
+  AchievementDef(
+    id: 'fully_loaded',
+    name: 'Fully Loaded',
+    desc: 'Reach weapon level 3',
+    icon: '🚀',
+    target: 3,
+    currentVal: (s) => s.maxWeaponLevel,
+  ),
+  AchievementDef(
+    id: 'boss_slayer',
+    name: 'Boss Slayer',
+    desc: 'Destroy 10 bosses',
+    icon: '👾',
+    target: 10,
+    currentVal: (s) => s.bossKills,
+  ),
+  AchievementDef(
+    id: 'wave_rider',
+    name: 'Wave Rider',
+    desc: 'Clear 10 waves',
+    icon: '🌊',
+    target: 10,
+    currentVal: (s) => s.wavesCleared,
+  ),
+  AchievementDef(
+    id: 'wave_master',
+    name: 'Wave Master',
+    desc: 'Clear 50 waves',
+    icon: '🌀',
+    target: 50,
+    currentVal: (s) => s.wavesCleared,
+  ),
+  AchievementDef(
+    id: 'untouchable',
+    name: 'Untouchable',
+    desc: 'Clear a wave without taking damage',
+    icon: '🛡️',
+    target: 1,
+    currentVal: (s) => s.flawlessWaves,
+  ),
+  AchievementDef(
+    id: 'test_pilot',
+    name: 'Test Pilot',
+    desc: 'Fly all 3 ship types',
+    icon: '🧑‍🚀',
+    target: 3,
+    currentVal: (s) => s.shipsUsed.length,
+  ),
+];
+
+// --- Roguelite Mode & Galaxy Map Models (#7) ---
+
+class SectorNodeType {
+  final String id;
+  final String name;
+  final String icon;
+  final Color color;
+  final String desc;
+
+  const SectorNodeType({
+    required this.id,
+    required this.name,
+    required this.icon,
+    required this.color,
+    required this.desc,
+  });
+}
+
+const List<SectorNodeType> kSectorNodeTypes = [
+  SectorNodeType(
+    id: 'nebula',
+    name: 'Crimson Nebula',
+    icon: '🌌',
+    color: Color(0xFFFF3355),
+    desc: 'A dense, volatile star-forming region',
+  ),
+  SectorNodeType(
+    id: 'asteroid',
+    name: 'Asteroid Field',
+    icon: '☄️',
+    color: Color(0xFFAA8866),
+    desc: 'Navigate through dangerous debris',
+  ),
+  SectorNodeType(
+    id: 'void',
+    name: 'The Void Cluster',
+    icon: '🌀',
+    color: Color(0xFF8833FF),
+    desc: 'Dark sector with strange anomalies',
+  ),
+  SectorNodeType(
+    id: 'forge',
+    name: 'Star Forge',
+    icon: '✨',
+    color: Color(0xFFFFCC00),
+    desc: 'Blistering heat from newborn stars',
+  ),
+  SectorNodeType(
+    id: 'pulsar',
+    name: 'Pulsar System',
+    icon: '⚡',
+    color: Color(0xFF00FFFF),
+    desc: 'Intense electromagnetic radiation',
+  ),
+];
+
+class GalaxyMapNode {
+  final String id;
+  final int tier;
+  final int col;
+  final String type; // 'nebula', 'asteroid', 'void', 'forge', 'pulsar', 'boss'
+
+  const GalaxyMapNode({
+    required this.id,
+    required this.tier,
+    required this.col,
+    required this.type,
+  });
+}
+
+List<List<GalaxyMapNode>> generateGalaxyMap(int loopCount, math.Random random) {
+  const structure = [1, 2, 3, 2, 1];
+  final List<List<GalaxyMapNode>> tiers = [];
+  int idCounter = 0;
+
+  for (int tierIdx = 0; tierIdx < structure.length; tierIdx++) {
+    final count = structure[tierIdx];
+    final List<GalaxyMapNode> tierNodes = [];
+
+    for (int col = 0; col < count; col++) {
+      String type;
+      if (tierIdx == structure.length - 1) {
+        type = 'boss';
+      } else if (tierIdx == 0) {
+        type = 'nebula';
+      } else {
+        type = kSectorNodeTypes[random.nextInt(kSectorNodeTypes.length)].id;
+      }
+
+      tierNodes.add(
+        GalaxyMapNode(
+          id: 'node_${loopCount}_${idCounter++}',
+          tier: tierIdx,
+          col: col,
+          type: type,
+        ),
+      );
+    }
+    tiers.add(tierNodes);
+  }
+  return tiers;
+}
+
 class AlienInvasionScreen extends StatefulWidget {
   const AlienInvasionScreen({super.key});
 
@@ -81,14 +325,33 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
     with SingleTickerProviderStateMixin {
   static const String _highScoreKey = 'alien_invasion_highscore';
   static const String _bestWaveKey = 'alien_invasion_best_wave';
+  static const String _lifetimeStatsKey = 'alien_invasion_lifetime_stats';
+  static const String _achievementsKey = 'alien_invasion_unlocked_achievements';
 
   late Ticker _ticker;
   final math.Random _random = math.Random();
   final FocusNode _focusNode = FocusNode();
 
-  // Menu and ship selection
+  // Menu, mode, and ship selection
   bool inMenu = true;
+  bool isRogueliteMode = false;
   String selectedShipId = 'fighter';
+
+  // Roguelite Galaxy Map state (#7)
+  bool inGalaxyMap = false;
+  int sectorLoop = 0;
+  List<List<GalaxyMapNode>> galaxyMap = [];
+  final Set<String> completedNodeIds = {};
+  GalaxyMapNode? currentSectorNode;
+  String currentTheme = 'nebula';
+
+  // Lifetime Stats & Achievements state (#6)
+  final LifetimeStats lifetimeStats = LifetimeStats();
+  final Set<String> unlockedAchievementIds = {};
+  String? activeToastText;
+  int toastRemainingFrames = 0;
+  bool waveTookDamage = false;
+  bool showAchievementsModal = false;
 
   // Game configuration & constants
   static const double logicalWidth = 800.0;
@@ -168,7 +431,7 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
   @override
   void initState() {
     super.initState();
-    _loadHighScore();
+    _loadLifetimeData();
     _resetGame();
     _ticker = createTicker(_onTick);
     _ticker.start();
@@ -187,7 +450,7 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
     super.dispose();
   }
 
-  void _loadHighScore() {
+  void _loadLifetimeData() {
     try {
       final String? scoreStr = localStorage.getItem(_highScoreKey);
       final String? waveStr = localStorage.getItem(_bestWaveKey);
@@ -197,33 +460,104 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
       if (waveStr != null) {
         bestWave = int.tryParse(waveStr) ?? 0;
       }
+
+      final String? statsStr = localStorage.getItem(_lifetimeStatsKey);
+      if (statsStr != null) {
+        final decoded = jsonDecode(statsStr);
+        if (decoded is Map<String, dynamic>) {
+          final loaded = LifetimeStats.fromJson(decoded);
+          lifetimeStats
+            ..totalKills = loaded.totalKills
+            ..wavesCleared = loaded.wavesCleared
+            ..bestCombo = loaded.bestCombo
+            ..maxWeaponLevel = loaded.maxWeaponLevel
+            ..bossKills = loaded.bossKills
+            ..flawlessWaves = loaded.flawlessWaves
+            ..shipsUsed = loaded.shipsUsed;
+        }
+      }
+
+      final String? achStr = localStorage.getItem(_achievementsKey);
+      if (achStr != null) {
+        final decoded = jsonDecode(achStr);
+        if (decoded is List) {
+          unlockedAchievementIds.addAll(decoded.map((e) => e.toString()));
+        }
+      }
     } catch (_) {}
   }
 
-  void _saveHighScore() {
-    var shouldSave = false;
+  void _saveLifetimeData() {
+    var shouldSaveScore = false;
 
     if (score > highScore) {
       highScore = score;
-      shouldSave = true;
+      shouldSaveScore = true;
     }
 
     if (waveNumber > bestWave) {
       bestWave = waveNumber;
-      shouldSave = true;
+      shouldSaveScore = true;
     }
 
-    if (shouldSave) {
-      try {
+    try {
+      if (shouldSaveScore) {
         localStorage.setItem(_highScoreKey, highScore.toString());
         localStorage.setItem(_bestWaveKey, bestWave.toString());
-      } catch (_) {}
+      }
+      localStorage.setItem(_lifetimeStatsKey, jsonEncode(lifetimeStats.toJson()));
+      localStorage.setItem(
+        _achievementsKey,
+        jsonEncode(unlockedAchievementIds.toList()),
+      );
+    } catch (_) {}
+  }
+
+  void _checkAchievements() {
+    for (final ach in kAchievements) {
+      if (!unlockedAchievementIds.contains(ach.id) &&
+          ach.currentVal(lifetimeStats) >= ach.target) {
+        unlockedAchievementIds.add(ach.id);
+        activeToastText = '🏆 Unlocked: ${ach.name} — ${ach.desc}';
+        toastRemainingFrames = 200; // ~3.3 seconds display
+        _playAlertSound();
+        HapticFeedback.vibrate();
+        _saveLifetimeData();
+      }
     }
   }
 
   void _initBackground() {
     stars.clear();
     planets.clear();
+
+    Color starTint = Colors.white;
+    Color planet1Color1 = const Color(0xFF8B3A3A);
+    Color planet1Color2 = const Color(0xFF2E0854);
+    Color planet2Color1 = const Color(0xFF20B2AA);
+    Color planet2Color2 = const Color(0xFF000080);
+
+    if (currentTheme == 'nebula') {
+      starTint = const Color(0xFFFF88AA);
+      planet1Color1 = const Color(0xFFFF3355);
+      planet1Color2 = const Color(0xFF660022);
+    } else if (currentTheme == 'asteroid') {
+      starTint = const Color(0xFFFFD1A4);
+      planet1Color1 = const Color(0xFFAA8866);
+      planet1Color2 = const Color(0xFF443322);
+    } else if (currentTheme == 'void') {
+      starTint = const Color(0xFFC792EA);
+      planet1Color1 = const Color(0xFF8833FF);
+      planet1Color2 = const Color(0xFF220055);
+    } else if (currentTheme == 'forge') {
+      starTint = const Color(0xFFFFE066);
+      planet1Color1 = const Color(0xFFFFCC00);
+      planet1Color2 = const Color(0xFFFF6600);
+    } else if (currentTheme == 'pulsar') {
+      starTint = const Color(0xFF80FFFF);
+      planet1Color1 = const Color(0xFF00FFFF);
+      planet1Color2 = const Color(0xFF004488);
+    }
 
     // Create background stars
     for (int i = 0; i < 60; i++) {
@@ -232,7 +566,7 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
         y: _random.nextDouble() * 900.0,
         speed: _random.nextDouble() * 1.5 + 0.5,
         radius: _random.nextDouble() * 1.2 + 0.8,
-        color: Colors.white.withValues(alpha: _random.nextDouble() * 0.5 + 0.3),
+        color: starTint.withValues(alpha: _random.nextDouble() * 0.5 + 0.3),
       ));
     }
     
@@ -242,16 +576,16 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
       y: 100.0,
       radius: 40.0,
       speed: 0.2,
-      color1: const Color(0xFF8B3A3A),
-      color2: const Color(0xFF2E0854),
+      color1: planet1Color1,
+      color2: planet1Color2,
     ));
     planets.add(GamePlanet(
       x: logicalWidth * 0.15,
       y: 400.0,
       radius: 80.0,
       speed: 0.1,
-      color1: const Color(0xFF20B2AA),
-      color2: const Color(0xFF000080),
+      color1: planet2Color1,
+      color2: planet2Color2,
       hasRings: true,
     ));
   }
@@ -303,13 +637,54 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
     flashOpacity = 0.0;
     _lag = 0.0;
     _lastTime = Duration.zero;
+    waveTookDamage = false;
+
+    // Track ship used for Test Pilot achievement
+    lifetimeStats.shipsUsed.add(selectedShipId);
+    _checkAchievements();
+    _saveLifetimeData();
 
     _adjustPlayerY();
-    _createAliens();
+    if (!inGalaxyMap) {
+      _createAliens();
+    }
+  }
+
+  void _startRogueliteCampaign() {
+    setState(() {
+      isRogueliteMode = true;
+      sectorLoop = 0;
+      galaxyMap = generateGalaxyMap(sectorLoop, _random);
+      completedNodeIds.clear();
+      currentSectorNode = null;
+      inGalaxyMap = true;
+      inMenu = false;
+      gameOver = false;
+    });
+    _resetGame();
+  }
+
+  void _launchSectorNode(GalaxyMapNode node) {
+    setState(() {
+      currentSectorNode = node;
+      currentTheme = node.type;
+      inGalaxyMap = false;
+      waveTookDamage = false;
+      _initBackground();
+
+      if (node.type == 'boss') {
+        aliens.clear();
+        _createBoss();
+      } else {
+        _createAliens();
+      }
+    });
+    _adjustPlayerY();
   }
 
   void _damagePlayer(int amount) {
-    if (gameOver || inMenu) return;
+    if (gameOver || inMenu || inGalaxyMap) return;
+    waveTookDamage = true;
     player.hp = (player.hp - amount).clamp(0, player.maxHp);
     shakeIntensity = 8.0;
     flashOpacity = 0.4;
@@ -531,6 +906,12 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
     _addScore(scoreBonus, cx, cy, const Color(0xFF7AF58F));
     bosses.removeAt(index);
 
+    // Track boss kill & achievement
+    lifetimeStats.bossKills++;
+    lifetimeStats.totalKills++;
+    _checkAchievements();
+    _saveLifetimeData();
+
     // Swarm Hive split behavior
     if (boss.type == BossType.hive && boss.gen < 2) {
       final int nextGen = boss.gen + 1;
@@ -585,7 +966,7 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
 
     while (_lag >= msPerFrame) {
       _updateBackground();
-      if (!gameOver && !inMenu) {
+      if (!gameOver && !inMenu && !inGalaxyMap) {
         _updateGame();
       }
       _lag -= msPerFrame;
@@ -602,6 +983,14 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
       flashOpacity *= 0.85;
     } else {
       flashOpacity = 0.0;
+    }
+
+    // Decrement achievement toast banner timer
+    if (toastRemainingFrames > 0) {
+      toastRemainingFrames--;
+      if (toastRemainingFrames == 0) {
+        activeToastText = null;
+      }
     }
 
     if (mounted) {
@@ -871,6 +1260,10 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
           );
           hits++;
           bulletConsumed = true;
+
+          // Track kill stats & achievement
+          lifetimeStats.totalKills++;
+          _checkAchievements();
           break;
         }
       }
@@ -975,10 +1368,46 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
       }
     }
 
-    // Start next wave if both aliens and bosses are cleared
+    // Wave cleared when both aliens and bosses are destroyed
     if (aliens.isEmpty && bosses.isEmpty) {
-      waveNumber++;
-      _createAliens();
+      lifetimeStats.wavesCleared++;
+      if (!waveTookDamage) {
+        lifetimeStats.flawlessWaves++;
+      }
+      waveTookDamage = false;
+      _checkAchievements();
+      _saveLifetimeData();
+
+      if (isRogueliteMode) {
+        if (currentSectorNode != null) {
+          completedNodeIds.add(currentSectorNode!.id);
+          if (currentSectorNode!.type == 'boss') {
+            // Sector Conquered!
+            sectorLoop++;
+            galaxyMap = generateGalaxyMap(sectorLoop, _random);
+            completedNodeIds.clear();
+            currentSectorNode = null;
+            inGalaxyMap = true;
+            _playAlertSound();
+            HapticFeedback.heavyImpact();
+            scorePopups.add(
+              GameScorePopup(
+                x: logicalWidth / 2 - 80,
+                y: _logicalHeight / 2,
+                text: 'SECTOR CONQUERED!',
+                life: 60,
+                color: const Color(0xFFFFD700),
+              ),
+            );
+          } else {
+            currentSectorNode = null;
+            inGalaxyMap = true;
+          }
+        }
+      } else {
+        waveNumber++;
+        _createAliens();
+      }
     }
   }
 
@@ -1043,6 +1472,11 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
 
   void _applyWeaponUpgrade() {
     weaponLevel = (weaponLevel + 1).clamp(1, 3);
+    if (weaponLevel > lifetimeStats.maxWeaponLevel) {
+      lifetimeStats.maxWeaponLevel = weaponLevel;
+      _checkAchievements();
+      _saveLifetimeData();
+    }
     if (weaponLevel == 3) {
       powerUps.clear();
     }
@@ -1065,6 +1499,11 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
     if (countsForCombo) {
       comboCount = comboTimerFrames > 0 ? comboCount + 1 : 1;
       comboTimerFrames = comboWindowFrames;
+      if (comboCount > lifetimeStats.bestCombo) {
+        lifetimeStats.bestCombo = comboCount;
+        _checkAchievements();
+        _saveLifetimeData();
+      }
     }
 
     final int multiplier = countsForCombo ? _getComboMultiplier(comboCount) : 1;
@@ -1111,7 +1550,7 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
     flashOpacity = 0.8;
     _playAlertSound();
     HapticFeedback.vibrate();
-    _saveHighScore();
+    _saveLifetimeData();
   }
 
   void _handleKeyEvent(KeyEvent event) {
@@ -1267,12 +1706,24 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
                             ),
                           ),
 
+                          // Galaxy Map Overlay (#7)
+                          if (inGalaxyMap)
+                            _buildGalaxyMapOverlay(isMobile),
+
                           // Hangar Ship Selector Overlay
-                          if (inMenu)
+                          if (inMenu && !inGalaxyMap)
                             _buildHangarOverlay(isMobile),
 
+                          // Achievements Modal (#6)
+                          if (showAchievementsModal)
+                            _buildAchievementsModal(),
+
+                          // Achievement Unlock Toast Banner (#6)
+                          if (toastRemainingFrames > 0 && activeToastText != null)
+                            _buildAchievementToast(),
+
                           // Game instructions or Game Over modal overlay
-                          if (gameOver && !inMenu)
+                          if (gameOver && !inMenu && !inGalaxyMap)
                             Container(
                               color: Colors.black87,
                               width: double.infinity,
@@ -1323,6 +1774,7 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
                                           setState(() {
                                             inMenu = true;
                                             gameOver = false;
+                                            inGalaxyMap = false;
                                           });
                                         },
                                         style: OutlinedButton.styleFrom(
@@ -1341,7 +1793,11 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
                                       const SizedBox(width: 16),
                                       ElevatedButton(
                                         onPressed: () {
-                                          _resetGame();
+                                          if (isRogueliteMode) {
+                                            _startRogueliteCampaign();
+                                          } else {
+                                            _resetGame();
+                                          }
                                         },
                                         style: ElevatedButton.styleFrom(
                                           backgroundColor: const Color(0xFF7B2CBF),
@@ -1409,7 +1865,7 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
                             : Colors.redAccent.withValues(alpha: 0.4),
                         onDown: () {
                           setState(() => shootPressed = true);
-                          if (!gameOver && canShoot && !inMenu) {
+                          if (!gameOver && canShoot && !inMenu && !inGalaxyMap) {
                             _shootBullet();
                           }
                         },
@@ -1470,6 +1926,438 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
     );
   }
 
+  Widget _buildAchievementToast() {
+    return Positioned(
+      top: 16,
+      left: 16,
+      right: 16,
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E1035).withValues(alpha: 0.95),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFFFD700), width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFFFD700).withValues(alpha: 0.35),
+                blurRadius: 16,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('🏆', style: TextStyle(fontSize: 20)),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  activeToastText ?? '',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAchievementsModal() {
+    final completedCount = unlockedAchievementIds.length;
+    final totalCount = kAchievements.length;
+
+    return Container(
+      color: Colors.black.withValues(alpha: 0.92),
+      width: double.infinity,
+      height: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 650, maxHeight: 600),
+          child: Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: const Color(0xFF141724),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: const Color(0xFF00F2FE).withValues(alpha: 0.5),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF00F2FE).withValues(alpha: 0.2),
+                  blurRadius: 24,
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        const Text('🏆', style: TextStyle(fontSize: 24)),
+                        const SizedBox(width: 8),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'LIFETIME ACHIEVEMENTS',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 2,
+                                color: Colors.white,
+                              ),
+                            ),
+                            Text(
+                              '$completedCount of $totalCount Unlocked',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF00F2FE),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white70),
+                      onPressed: () => setState(() => showAchievementsModal = false),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: LinearProgressIndicator(
+                    value: totalCount > 0 ? (completedCount / totalCount) : 0,
+                    minHeight: 8,
+                    backgroundColor: Colors.white10,
+                    valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFFFD700)),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Expanded(
+                  child: ListView.separated(
+                    itemCount: kAchievements.length,
+                    separatorBuilder: (context, index) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      final ach = kAchievements[index];
+                      final isUnlocked = unlockedAchievementIds.contains(ach.id);
+                      final current = ach.currentVal(lifetimeStats).clamp(0, ach.target);
+                      final double progress = (current / ach.target).clamp(0.0, 1.0);
+
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: isUnlocked
+                              ? const Color(0xFF1E2640).withValues(alpha: 0.8)
+                              : const Color(0xFF0D0F18).withValues(alpha: 0.8),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isUnlocked
+                                ? const Color(0xFFFFD700).withValues(alpha: 0.6)
+                                : Colors.white10,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Text(
+                              ach.icon,
+                              style: TextStyle(
+                                fontSize: 24,
+                                color: isUnlocked ? null : Colors.grey,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        ach.name,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: isUnlocked ? Colors.white : Colors.white60,
+                                        ),
+                                      ),
+                                      Text(
+                                        isUnlocked
+                                            ? 'COMPLETED ✓'
+                                            : '$current / ${ach.target}',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: isUnlocked
+                                              ? const Color(0xFFFFD700)
+                                              : const Color(0xFF00F2FE),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    ach.desc,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: isUnlocked ? Colors.white70 : Colors.white38,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: LinearProgressIndicator(
+                                      value: progress,
+                                      minHeight: 4,
+                                      backgroundColor: Colors.white10,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        isUnlocked
+                                            ? const Color(0xFFFFD700)
+                                            : const Color(0xFF00F2FE),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 10),
+                ElevatedButton(
+                  onPressed: () => setState(() => showAchievementsModal = false),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF7B2CBF),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: const Text('CLOSE', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGalaxyMapOverlay(bool isMobile) {
+    int activeTier = 0;
+    for (int t = 0; t < galaxyMap.length; t++) {
+      final bool tierDone = galaxyMap[t].any((n) => completedNodeIds.contains(n.id));
+      if (!tierDone) {
+        activeTier = t;
+        break;
+      }
+      if (t == galaxyMap.length - 1 && tierDone) {
+        activeTier = galaxyMap.length;
+      }
+    }
+
+    return Container(
+      color: Colors.black.withValues(alpha: 0.94),
+      width: double.infinity,
+      height: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Center(
+        child: SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 750),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ShaderMask(
+                  shaderCallback: (bounds) => const LinearGradient(
+                    colors: [Color(0xFFFF8800), Color(0xFFFFCC00)],
+                  ).createShader(bounds),
+                  child: Text(
+                    'GALAXY SECTOR ${sectorLoop + 1}',
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 3,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                const Text(
+                  'SELECT AN ACTIVE COMBAT SECTOR TO ADVANCE',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.5,
+                    color: Color(0xFFFFD54A),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Render Map Tiers (Top to Bottom or Tier 4 down to Tier 0)
+                Column(
+                  children: List.generate(galaxyMap.length, (tierIdx) {
+                    final tier = galaxyMap[tierIdx];
+                    final bool isRowActive = tierIdx == activeTier;
+                    final bool isRowDone = tier.any((n) => completedNodeIds.contains(n.id));
+
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: tier.map((node) {
+                              final isDone = completedNodeIds.contains(node.id);
+                              final isBoss = node.type == 'boss';
+                              final isClickable = isRowActive && !isDone;
+                              final isBypassed = !isDone && isRowDone;
+
+                              SectorNodeType nodeInfo;
+                              if (isBoss) {
+                                nodeInfo = const SectorNodeType(
+                                  id: 'boss',
+                                  name: 'Sector Boss',
+                                  icon: '👽',
+                                  color: Color(0xFFFF3333),
+                                  desc: 'Defeat the sector guardian',
+                                );
+                              } else {
+                                nodeInfo = kSectorNodeTypes.firstWhere(
+                                  (n) => n.id == node.type,
+                                  orElse: () => kSectorNodeTypes[0],
+                                );
+                              }
+
+                              return GestureDetector(
+                                onTap: () {
+                                  if (isClickable) {
+                                    _launchSectorNode(node);
+                                    _playAlertSound();
+                                  }
+                                },
+                                child: Container(
+                                  width: isMobile ? 120 : 160,
+                                  margin: const EdgeInsets.symmetric(horizontal: 6),
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: isDone
+                                        ? const Color(0xFF0F2B1D).withValues(alpha: 0.8)
+                                        : (isClickable
+                                            ? nodeInfo.color.withValues(alpha: 0.2)
+                                            : const Color(0xFF141724).withValues(alpha: 0.5)),
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: isDone
+                                          ? const Color(0xFF00FF88)
+                                          : (isClickable ? nodeInfo.color : Colors.white12),
+                                      width: isClickable ? 2.0 : 1.0,
+                                    ),
+                                    boxShadow: [
+                                      if (isClickable)
+                                        BoxShadow(
+                                          color: nodeInfo.color.withValues(alpha: 0.4),
+                                          blurRadius: 14,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                    ],
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      Text(
+                                        isDone ? '✓' : (isBoss ? '👾' : nodeInfo.icon),
+                                        style: TextStyle(
+                                          fontSize: 22,
+                                          color: isDone ? const Color(0xFF00FF88) : null,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        isBoss && !isClickable && !isDone
+                                            ? 'LOCKED BOSS'
+                                            : nodeInfo.name,
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: isClickable ? Colors.white : Colors.white60,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        isDone
+                                            ? 'Cleared'
+                                            : isBypassed
+                                                ? 'Bypassed'
+                                                : isClickable
+                                                    ? 'DEPLOY NOW'
+                                                    : 'Locked',
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w700,
+                                          color: isDone
+                                              ? const Color(0xFF00FF88)
+                                              : (isClickable ? nodeInfo.color : Colors.white30),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                          if (tierIdx < galaxyMap.length - 1)
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 2),
+                              child: Icon(Icons.arrow_downward, size: 14, color: Colors.white24),
+                            ),
+                        ],
+                      ),
+                    );
+                  }),
+                ),
+
+                const SizedBox(height: 16),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.arrow_back, size: 16),
+                  label: const Text('ABORT TO HANGAR'),
+                  onPressed: () {
+                    setState(() {
+                      inGalaxyMap = false;
+                      inMenu = true;
+                    });
+                  },
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white70,
+                    side: const BorderSide(color: Colors.white24),
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildHangarOverlay(bool isMobile) {
     final selectedConfig = kShipConfigs.firstWhere(
       (c) => c.id == selectedShipId,
@@ -1505,7 +2393,7 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
                 ),
                 const SizedBox(height: 4),
                 const Text(
-                  'SELECT YOUR COMBAT VESSEL',
+                  'SELECT YOUR COMBAT VESSEL & MODE',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
@@ -1513,7 +2401,42 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
                     color: Color(0xFF9E8FFF),
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 14),
+
+                // Game Mode Selector Pill
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ChoiceChip(
+                      label: const Text('CLASSIC ENDLESS'),
+                      selected: !isRogueliteMode,
+                      onSelected: (val) {
+                        if (val) setState(() => isRogueliteMode = false);
+                      },
+                      selectedColor: const Color(0xFF00F2FE).withValues(alpha: 0.3),
+                      labelStyle: TextStyle(
+                        color: !isRogueliteMode ? const Color(0xFF00F2FE) : Colors.white60,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    ChoiceChip(
+                      label: const Text('ROGUELITE GALAXY'),
+                      selected: isRogueliteMode,
+                      onSelected: (val) {
+                        if (val) setState(() => isRogueliteMode = true);
+                      },
+                      selectedColor: const Color(0xFFFF8800).withValues(alpha: 0.3),
+                      labelStyle: TextStyle(
+                        color: isRogueliteMode ? const Color(0xFFFFCC00) : Colors.white60,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
 
                 // Ship Cards
                 LayoutBuilder(
@@ -1648,37 +2571,70 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
                   ),
                 ),
 
-                const SizedBox(height: 24),
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.rocket_launch, size: 20),
-                  label: const Text(
-                    'LAUNCH MISSION',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 2,
+                const SizedBox(height: 20),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 10,
+                  alignment: WrapAlignment.center,
+                  children: [
+                    OutlinedButton.icon(
+                      icon: const Text('🏆', style: TextStyle(fontSize: 16)),
+                      label: Text(
+                        'ACHIEVEMENTS (${unlockedAchievementIds.length}/${kAchievements.length})',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      onPressed: () => setState(() => showAchievementsModal = true),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFFFFD700),
+                        side: const BorderSide(color: Color(0xFFFFD700)),
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
                     ),
-                  ),
-                  onPressed: () {
-                    setState(() {
-                      inMenu = false;
-                    });
-                    _resetGame();
-                    _playAlertSound();
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF7B2CBF),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 40,
-                      vertical: 16,
+                    ElevatedButton.icon(
+                      icon: Icon(
+                        isRogueliteMode ? Icons.map : Icons.rocket_launch,
+                        size: 20,
+                      ),
+                      label: Text(
+                        isRogueliteMode ? 'ENTER GALAXY MAP' : 'LAUNCH MISSION',
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                      onPressed: () {
+                        if (isRogueliteMode) {
+                          _startRogueliteCampaign();
+                        } else {
+                          setState(() {
+                            inMenu = false;
+                          });
+                          _resetGame();
+                          _playAlertSound();
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: isRogueliteMode
+                            ? const Color(0xFFFF6600)
+                            : const Color(0xFF7B2CBF),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 32,
+                          vertical: 15,
+                        ),
+                        elevation: 10,
+                        shadowColor: (isRogueliteMode
+                                ? const Color(0xFFFF6600)
+                                : const Color(0xFF7B2CBF))
+                            .withValues(alpha: 0.7),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
                     ),
-                    elevation: 10,
-                    shadowColor: const Color(0xFF7B2CBF).withValues(alpha: 0.7),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
+                  ],
                 ),
               ],
             ),

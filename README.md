@@ -11,33 +11,29 @@ Runs on all Flutter targets: Android, iOS, web, Windows, macOS, and Linux.
 
 | Game | Genre | Notes |
 | --- | --- | --- |
-| Alien Invasion | Retro space shooter | Fire missiles, dodge bombs, beat the boss |
-| Pacman Arcade | Maze / arcade | Chomp pellets, dodge ghosts |
+| Alien Invasion | Retro space shooter | Fire missiles, dodge bombs, beat unique boss roster, and unlock achievements |
+| Pacman Arcade | Maze / arcade | Chomp pellets, dodge ghosts with neon virtual joystick |
 | 2048 Fusion | Puzzle / logic | Slide and merge tiles to 2048 |
-| Wordle Clone | Word puzzle | Guess the daily 5-letter word |
+| Wordle Clone | Word puzzle | Guess the randomized 5-letter word with auto-submission |
 | Minesweeper | Logic / puzzle | Reveal safe tiles, flag mines, level up |
 | Sudoku | Logic / puzzle | Fill the 9×9 grid; multiple difficulties |
-| Boxing RPG | RPG / brawler | Pick a class, level up, shop, and topple the Titan Boss every 4th fight |
 
 ## Project layout
 
 ```
 lib/
   main.dart                     App entry; dark theme + GamesHubScreen
-  boxing_model.dart             Pure-Dart game model for Boxing RPG
   wordle_words.dart             Word list for Wordle
   screens/
     games_hub_screen.dart       Launcher grid + persisted best-score stats
-    alien_invasion_screen.dart
-    pacman_arcade_screen.dart
+    alien_invasion_screen.dart  Starfleet hangar, boss roster, galaxy map & achievements
+    pacman_arcade_screen.dart   Virtual joystick & neon maze rendering
     game_2048_screen.dart
     wordle_screen.dart
     minesweeper_screen.dart
     sudoku_screen.dart
-    boxing_screen.dart          Menu, combat loop, shop, 2D CustomPainter ring
 test/
-  boxing_model_test.dart        Combat math / progression / save round-trip
-  widget_test.dart              Boxing screen smoke test
+  widget_test.dart              Smoke and feature tests
 assets/
   wordle_dictionary.json
 ```
