@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:localstorage/localstorage.dart';
 import 'alien_invasion_screen.dart';
+import 'big2_screen.dart';
 import 'game_2048_screen.dart';
 import 'minesweeper_screen.dart';
 import 'pacman_arcade_screen.dart';
 import 'sudoku_screen.dart';
 import 'wordle_screen.dart';
+import '../big2_stats.dart';
 
 class GamesHubScreen extends StatefulWidget {
   const GamesHubScreen({super.key});
@@ -22,6 +24,8 @@ class _GamesHubScreenState extends State<GamesHubScreen> {
   int _bestMinesweeperLevel = 0;
   int _bestPacmanScore = 0;
   int _sudokuSolved = 0;
+  int _big2GamesWon = 0;
+  int _big2GamesPlayed = 0;
 
   @override
   void initState() {
@@ -48,6 +52,7 @@ class _GamesHubScreenState extends State<GamesHubScreen> {
       final String? sudokuSolvedStr = localStorage.getItem(
         'sudoku_solved_count',
       );
+      final big2Stats = Big2Stats.load();
 
       final int nextAlienScore = int.tryParse(scoreStr ?? '0') ?? 0;
       final int nextAlienWave = int.tryParse(alienWaveStr ?? '0') ?? 0;
@@ -67,6 +72,8 @@ class _GamesHubScreenState extends State<GamesHubScreen> {
         _bestMinesweeperScore = nextMinesweeperBestScore;
         _bestMinesweeperLevel = nextMinesweeperBestLevel;
         _sudokuSolved = nextSudokuSolved;
+        _big2GamesWon = big2Stats.gamesWon;
+        _big2GamesPlayed = big2Stats.gamesPlayed;
       });
     } catch (_) {
       // Fallback if localStorage fails
@@ -117,6 +124,14 @@ class _GamesHubScreenState extends State<GamesHubScreen> {
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const SudokuScreen()),
+    );
+    _loadHighScore();
+  }
+
+  Future<void> _navigateToBig2(BuildContext context) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const Big2Screen()),
     );
     _loadHighScore();
   }
@@ -345,6 +360,25 @@ class _GamesHubScreenState extends State<GamesHubScreen> {
                       icon: Icons.grid_3x3,
                       statText: 'Solved: $_sudokuSolved',
                       onTap: () => _navigateToSudoku(context),
+                    ),
+                    // Game 7: Big Two (大老二) (Active)
+                    _buildGameCard(
+                      context: context,
+                      title: 'Big Two (大老二)',
+                      description:
+                          'Classic 4-player trick-shedding card game against 3 smart AI bots. Form singles, pairs, triples, and 5-card poker hands with 2s ranking highest!',
+                      genre: 'Card Game / Strategy',
+                      bannerGradient: const [
+                        Color(0xFF0F321C),
+                        Color(0xFF1B4D2E),
+                      ],
+                      actionText: 'PLAY NOW',
+                      isPlayable: true,
+                      icon: Icons.style_outlined,
+                      statText: _big2GamesPlayed > 0
+                          ? 'Won: $_big2GamesWon/$_big2GamesPlayed'
+                          : 'New Game',
+                      onTap: () => _navigateToBig2(context),
                     ),
                   ]),
                 ),

@@ -1,4 +1,4 @@
-// Big 2 (大老二) 4-Player Table UI & Interactive Gameplay Screen — #14
+// Big 2 (大老二) 4-Player Table UI & Interactive Gameplay Screen — #14, #15
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -7,6 +7,8 @@ import '../big2_deck.dart';
 import '../big2_rules.dart';
 import '../big2_bot.dart';
 import '../big2_game.dart';
+import '../big2_scoring.dart';
+import '../big2_stats.dart';
 
 const List<String> kBig2PlayerNames = ['You', 'West 🤖', 'North 🤖', 'East 🤖'];
 const int kLocalPlayer = 0;
@@ -25,6 +27,9 @@ class _Big2ScreenState extends State<Big2Screen> with SingleTickerProviderStateM
   final List<int> _cumulativeScores = [0, 0, 0, 0];
   int _round = 1;
   bool _isPaused = false;
+  bool _houseRules = true;
+  bool _comboBonusesEnabled = true;
+  Big2RoundResult? _roundResult;
   Timer? _botTimer;
   Timer? _autoPassTimer;
   String? _statusBanner;
@@ -52,8 +57,30 @@ class _Big2ScreenState extends State<Big2Screen> with SingleTickerProviderStateM
       _gameState = Big2GameState.newGame();
       _selectedCardIds.clear();
       _statusBanner = null;
+      _roundResult = null;
     });
     _checkBotTurn();
+  }
+
+  void _evaluateRoundEnd() {
+    if (_gameState.winner == null || _roundResult != null) return;
+
+    final result = Big2Scoring.scoreRound(
+      hands: _gameState.hands,
+      winner: _gameState.winner!,
+      houseRules: _houseRules,
+      comboBonuses: _gameState.comboBonuses,
+      comboBonusesEnabled: _comboBonusesEnabled,
+    );
+
+    setState(() {
+      _roundResult = result;
+      for (int i = 0; i < Big2Deck.playerCount; i++) {
+        _cumulativeScores[i] += result.deltas[i];
+      }
+    });
+
+    Big2Stats.recordGame(_gameState.winner == kLocalPlayer);
   }
 
   void _checkBotTurn() {
@@ -93,7 +120,11 @@ class _Big2ScreenState extends State<Big2Screen> with SingleTickerProviderStateM
         }
       });
 
-      _checkBotTurn();
+      if (_gameState.winner != null) {
+        _evaluateRoundEnd();
+      } else {
+        _checkBotTurn();
+      }
     });
   }
 
@@ -124,7 +155,11 @@ class _Big2ScreenState extends State<Big2Screen> with SingleTickerProviderStateM
       HapticFeedback.mediumImpact();
     });
 
-    _checkBotTurn();
+    if (_gameState.winner != null) {
+      _evaluateRoundEnd();
+    } else {
+      _checkBotTurn();
+    }
   }
 
   void _onPass() {
@@ -197,6 +232,11 @@ class _Big2ScreenState extends State<Big2Screen> with SingleTickerProviderStateM
             },
           ),
           IconButton(
+            icon: const Icon(Icons.bar_chart, color: Colors.white70),
+            tooltip: 'Statistics',
+            onPressed: _showStatsDialog,
+          ),
+          IconButton(
             icon: const Icon(Icons.help_outline, color: Colors.white70),
             tooltip: 'Rules & Combinations',
             onPressed: _showRulesDialog,
@@ -204,9 +244,7 @@ class _Big2ScreenState extends State<Big2Screen> with SingleTickerProviderStateM
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.white70),
             tooltip: 'New Game',
-            onPressed: () {
-              _startNewRound();
-            },
+            onPressed: () => _startNewRound(),
           ),
         ],
       ),
@@ -238,7 +276,7 @@ class _Big2ScreenState extends State<Big2Screen> with SingleTickerProviderStateM
                   children: [
                     // West Bot
                     SizedBox(
-                      width: 100,
+                      width: 90,
                       child: _buildOpponentSeat(
                         playerIndex: 1,
                         positionLabel: 'West',
@@ -254,7 +292,7 @@ class _Big2ScreenState extends State<Big2Screen> with SingleTickerProviderStateM
 
                     // East Bot
                     SizedBox(
-                      width: 100,
+                      width: 90,
                       child: _buildOpponentSeat(
                         playerIndex: 3,
                         positionLabel: 'East',
@@ -414,12 +452,16 @@ class _Big2ScreenState extends State<Big2Screen> with SingleTickerProviderStateM
               Text(
                 '🏆 ${kBig2PlayerNames[winner]} WINS!',
                 style: const TextStyle(
-                  fontSize: 22,
+                  fontSize: 20,
                   fontWeight: FontWeight.bold,
                   color: Colors.amberAccent,
                 ),
               ),
-              const SizedBox(height: 8),
+              if (_roundResult != null) ...[
+                const SizedBox(height: 8),
+                _buildResultsSummary(_roundResult!),
+              ],
+              const SizedBox(height: 10),
               ElevatedButton.icon(
                 onPressed: _startNewRound,
                 icon: const Icon(Icons.play_arrow),
@@ -427,6 +469,7 @@ class _Big2ScreenState extends State<Big2Screen> with SingleTickerProviderStateM
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF2E7D32),
                   foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                 ),
               ),
             ] else if (trick != null && trick.cards.isNotEmpty) ...[
@@ -481,6 +524,78 @@ class _Big2ScreenState extends State<Big2Screen> with SingleTickerProviderStateM
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildResultsSummary(Big2RoundResult res) {
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 360),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F172A).withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'Round Score Breakdown',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.amber),
+          ),
+          const SizedBox(height: 4),
+          Table(
+            columnWidths: const {
+              0: FlexColumnWidth(2.5),
+              1: FlexColumnWidth(1.5),
+              2: FlexColumnWidth(1.5),
+            },
+            children: List.generate(4, (i) {
+              final isWinner = i == _gameState.winner;
+              final delta = res.deltas[i];
+              final deltaColor = delta >= 0 ? Colors.greenAccent : Colors.redAccent;
+              final b = res.breakdown[i];
+              String bonusText = '';
+              if (b.doubledByTwos) bonusText += ' [2s ×2]';
+              if (b.doubledByStrong) bonusText += ' [Quad ×2]';
+              if (res.comboBonuses[i] > 0) bonusText += ' [+${res.comboBonuses[i]} Bonus]';
+
+              return TableRow(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Text(
+                      '${kBig2PlayerNames[i]}${isWinner ? " 🏆" : ""}$bonusText',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: isWinner ? FontWeight.bold : FontWeight.normal,
+                        color: isWinner ? Colors.amber : Colors.white70,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Text(
+                      isWinner ? 'Went out' : '${b.cardsLeft} left',
+                      style: const TextStyle(fontSize: 10, color: Colors.white60),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Text(
+                      delta >= 0 ? '+$delta' : '$delta',
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: deltaColor),
+                      textAlign: TextAlign.right,
+                    ),
+                  ),
+                ],
+              );
+            }),
+          ),
+        ],
       ),
     );
   }
@@ -627,51 +742,146 @@ class _Big2ScreenState extends State<Big2Screen> with SingleTickerProviderStateM
     );
   }
 
-  void _showRulesDialog() {
+  void _showStatsDialog() {
+    final stats = Big2Stats.load();
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1E293B),
-        title: const Text('Big Two Rules & Combinations', style: TextStyle(color: Colors.white)),
-        content: const SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Hierarchy & Rankings:',
-                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.amber),
-              ),
-              SizedBox(height: 4),
-              Text(
-                '• Card Values: 3 (lowest) ... K, A, 2 (highest)\n'
-                '• Suit Order: ♦ < ♣ < ♥ < ♠ (Spades highest)\n'
-                '• 3♦ leads the first trick of the round.',
-                style: TextStyle(color: Colors.white70, fontSize: 13),
-              ),
-              SizedBox(height: 12),
-              Text(
-                '5-Card Combinations (Lowest to Highest):',
-                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.amber),
-              ),
-              SizedBox(height: 4),
-              Text(
-                '1. Straight (5 consecutive, A-2-3-4-5 wheel supported)\n'
-                '2. Flush (5 cards of the same suit)\n'
-                '3. Full House (Triple + Pair)\n'
-                '4. Four of a Kind (4 of a rank + 1 kicker)\n'
-                '5. Straight Flush (5 consecutive cards of the same suit)',
-                style: TextStyle(color: Colors.white70, fontSize: 13),
-              ),
-            ],
-          ),
+        title: const Row(
+          children: [
+            Icon(Icons.bar_chart, color: Colors.amber),
+            SizedBox(width: 8),
+            Text('Big Two Statistics', style: TextStyle(color: Colors.white)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildStatRow('Games Played', '${stats.gamesPlayed}'),
+            _buildStatRow('Games Won', '${stats.gamesWon}'),
+            _buildStatRow('Win Rate', '${stats.winRate}%'),
+            const Divider(color: Colors.white24, height: 20),
+            const Text('Leaderboard (Current Session)', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 12)),
+            const SizedBox(height: 8),
+            ...List.generate(4, (i) {
+              final score = _cumulativeScores[i];
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(kBig2PlayerNames[i], style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                    Text(
+                      score >= 0 ? '+$score' : '$score',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: score >= 0 ? Colors.greenAccent : Colors.redAccent,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Got it', style: TextStyle(color: Colors.amber)),
+            child: const Text('Close', style: TextStyle(color: Colors.amber)),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildStatRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+          Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+        ],
+      ),
+    );
+  }
+
+  void _showRulesDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF1E293B),
+          title: const Text('Big Two Rules & Combinations', style: TextStyle(color: Colors.white)),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Hierarchy & Rankings:',
+                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.amber),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  '• Card Values: 3 (lowest) ... K, A, 2 (highest)\n'
+                  '• Suit Order: ♦ < ♣ < ♥ < ♠ (Spades highest)\n'
+                  '• 3♦ leads the first trick of the round.',
+                  style: TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  '5-Card Combinations (Lowest to Highest):',
+                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.amber),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  '1. Straight (5 consecutive, A-2-3-4-5 wheel supported)\n'
+                  '2. Flush (5 cards of the same suit)\n'
+                  '3. Full House (Triple + Pair)\n'
+                  '4. Four of a Kind (4 of a rank + 1 kicker)\n'
+                  '5. Straight Flush (5 consecutive cards of the same suit)',
+                  style: TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'House Rules & Multipliers:',
+                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.amber),
+                ),
+                CheckboxListTile(
+                  title: const Text('Unused 2s & Quads Penalty ×2', style: TextStyle(color: Colors.white, fontSize: 12)),
+                  value: _houseRules,
+                  onChanged: (val) {
+                    setDialogState(() => _houseRules = val ?? true);
+                    setState(() => _houseRules = val ?? true);
+                  },
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+                CheckboxListTile(
+                  title: const Text('Premium Combo Bonuses (+3/+6/+9/+12)', style: TextStyle(color: Colors.white, fontSize: 12)),
+                  value: _comboBonusesEnabled,
+                  onChanged: (val) {
+                    setDialogState(() => _comboBonusesEnabled = val ?? true);
+                    setState(() => _comboBonusesEnabled = val ?? true);
+                  },
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Got it', style: TextStyle(color: Colors.amber)),
+            ),
+          ],
+        ),
       ),
     );
   }

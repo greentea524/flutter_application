@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:flutter_application/screens/alien_invasion_screen.dart';
+import 'package:flutter_application/screens/games_hub_screen.dart';
 import 'package:flutter_application/screens/pacman_arcade_screen.dart';
 import 'package:flutter_application/screens/wordle_screen.dart';
 
@@ -185,5 +186,26 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.byType(PacmanArcadeScreen), findsOneWidget);
+  });
+
+  testWidgets('GamesHubScreen renders Big Two (大老二) launcher card', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await tester.pumpWidget(const MaterialApp(home: GamesHubScreen()));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('NEBULA PLAY'), findsOneWidget);
+
+    final cardFinder = find.text('Big Two (大老二)');
+    await tester.scrollUntilVisible(
+      cardFinder,
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(cardFinder, findsOneWidget);
   });
 }
