@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -356,6 +357,11 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
   // Game configuration & constants
   static const double logicalWidth = 800.0;
   static const double bulletSpeed = 7.0;
+  // The only thing that paces the gun. There is deliberately no cap on how
+  // many bullets may be alive: gating on that made the fire rate a function
+  // of how far shots had travelled, so a bigger volley meant longer stalls
+  // and upgrading your weapon made you shoot slower (#16).
+  static const int shootCooldownMs = 200;
   static const double bulletWidth = 4.0;
   static const double bulletHeight = 10.0;
   static const double alienWidth = 30.0;
@@ -408,6 +414,14 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
   bool spacePressed = false;
   bool shootPressed = false;
 
+  // A fire request that has not been spent yet. A tap landing while the gun
+  // is still cooling used to be dropped on the floor; latching it means the
+  // shot goes out on the frame the cooldown ends instead of never.
+  bool _wantsToShoot = false;
+  // Held so a run that restarts (or a screen that closes) mid-cooldown does
+  // not get its `canShoot` flipped back by a timer belonging to the old run.
+  Timer? _shootCooldownTimer;
+
   // Visual effects
   double shakeIntensity = 0.0;
   double flashOpacity = 0.0;
@@ -445,6 +459,7 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
 
   @override
   void dispose() {
+    _shootCooldownTimer?.cancel();
     _ticker.dispose();
     _focusNode.dispose();
     super.dispose();
@@ -630,8 +645,11 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
     comboCount = 0;
     comboTimerFrames = 0;
     gameOver = false;
+    _shootCooldownTimer?.cancel();
+    _shootCooldownTimer = null;
     canShoot = true;
     shootPressed = false;
+    _wantsToShoot = false;
     alienDirection = 1;
     shakeIntensity = 0.0;
     flashOpacity = 0.0;
@@ -1033,9 +1051,12 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
       player.x += player.speed;
     }
 
-    // Auto-fire or key-held fire
-    if ((spacePressed || shootPressed) && canShoot) {
+    // Auto-fire while held, plus any single tap latched since the last
+    // frame. This is the only caller of _shootBullet(): input handlers set
+    // intent, the loop decides when it is spent.
+    if ((spacePressed || shootPressed || _wantsToShoot) && canShoot) {
       _shootBullet();
+      _wantsToShoot = false;
     }
 
     // Update bullets
@@ -1413,61 +1434,61 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
 
   void _shootBullet() {
     final int bulletsPerShot = weaponLevel;
-    if (bullets.length <= 6 - bulletsPerShot) {
-      if (weaponLevel == 3) {
-        bullets.add(
-          GameBullet(
-            player.x + player.width * 0.2 - bulletWidth / 2,
-            player.y - bulletHeight,
-          ),
-        );
-        bullets.add(
-          GameBullet(
-            player.x + player.width / 2 - bulletWidth / 2,
-            player.y - bulletHeight,
-          ),
-        );
-        bullets.add(
-          GameBullet(
-            player.x + player.width * 0.8 - bulletWidth / 2,
-            player.y - bulletHeight,
-          ),
-        );
-      } else if (weaponLevel == 2) {
-        bullets.add(
-          GameBullet(
-            player.x + player.width * 0.25 - bulletWidth / 2,
-            player.y - bulletHeight,
-          ),
-        );
-        bullets.add(
-          GameBullet(
-            player.x + player.width * 0.75 - bulletWidth / 2,
-            player.y - bulletHeight,
-          ),
-        );
-      } else {
-        bullets.add(
-          GameBullet(
-            player.x + player.width / 2 - bulletWidth / 2,
-            player.y - bulletHeight,
-          ),
-        );
-      }
-
-      bulletsShot += bulletsPerShot;
-      canShoot = false;
-      _playClickSound();
-      HapticFeedback.selectionClick();
-
-      Future.delayed(const Duration(milliseconds: 200), () {
-        if (mounted) {
-          setState(() {
-            canShoot = true;
-          });
-        }
-      });
+    if (weaponLevel == 3) {
+      bullets.add(
+        GameBullet(
+          player.x + player.width * 0.2 - bulletWidth / 2,
+          player.y - bulletHeight,
+        ),
+      );
+      bullets.add(
+        GameBullet(
+          player.x + player.width / 2 - bulletWidth / 2,
+          player.y - bulletHeight,
+        ),
+      );
+      bullets.add(
+        GameBullet(
+          player.x + player.width * 0.8 - bulletWidth / 2,
+          player.y - bulletHeight,
+        ),
+      );
+    } else if (weaponLevel == 2) {
+      bullets.add(
+        GameBullet(
+          player.x + player.width * 0.25 - bulletWidth / 2,
+          player.y - bulletHeight,
+        ),
+      );
+      bullets.add(
+        GameBullet(
+          player.x + player.width * 0.75 - bulletWidth / 2,
+          player.y - bulletHeight,
+        ),
+      );
+    } else {
+      bullets.add(
+        GameBullet(
+          player.x + player.width / 2 - bulletWidth / 2,
+          player.y - bulletHeight,
+        ),
+      );
     }
+
+    bulletsShot += bulletsPerShot;
+    canShoot = false;
+    _playClickSound();
+    HapticFeedback.selectionClick();
+
+    // A stored handle rather than a bare Future.delayed: a restart or a
+    // dispose mid-cooldown must be able to cancel it, or the old run's timer
+    // lands in the new one and hands back an early shot. _onTick already
+    // calls setState every frame, so this does not need its own.
+    _shootCooldownTimer?.cancel();
+    _shootCooldownTimer = Timer(
+      const Duration(milliseconds: shootCooldownMs),
+      () => canShoot = true,
+    );
   }
 
   void _applyWeaponUpgrade() {
@@ -1562,6 +1583,9 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
       rightPressed = isDown;
     } else if (event.logicalKey == LogicalKeyboardKey.space) {
       spacePressed = isDown;
+      if (isDown && !gameOver && !inMenu && !inGalaxyMap) {
+        _wantsToShoot = true;
+      }
     }
   }
 
@@ -1864,10 +1888,12 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
                             ? Colors.redAccent.withValues(alpha: 0.75)
                             : Colors.redAccent.withValues(alpha: 0.4),
                         onDown: () {
-                          setState(() => shootPressed = true);
-                          if (!gameOver && canShoot && !inMenu && !inGalaxyMap) {
-                            _shootBullet();
-                          }
+                          setState(() {
+                            shootPressed = true;
+                            if (!gameOver && !inMenu && !inGalaxyMap) {
+                              _wantsToShoot = true;
+                            }
+                          });
                         },
                         onUp: () {
                           setState(() => shootPressed = false);
