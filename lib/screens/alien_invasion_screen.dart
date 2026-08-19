@@ -1593,6 +1593,16 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final isMobile = size.width < 768;
+    // During play the top bar carries a Hangar button the hangar's own bar
+    // does not, and back + that button group alone need more than a 320px
+    // phone has (#19). Below this width the group is compacted rather than
+    // allowed to push the bar past its bounds.
+    //
+    // 500 rather than something tighter because the title is what absorbs
+    // whatever is left: at 412px (Pixel 7) the full-size buttons squeezed it
+    // to a third of its size, which fit but looked wrong. Every phone gets
+    // the compact bar; tablets and desktop are unchanged.
+    final isNarrowBar = size.width < 500;
     final currentHeight = _logicalHeight;
 
     return Scaffold(
@@ -1618,24 +1628,50 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
                     icon: const Icon(Icons.arrow_back, color: Colors.white),
                     onPressed: () => Navigator.pop(context),
                   ),
-                  const Text(
-                    'INVASION',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 2,
-                      color: Colors.white,
+                  // Flexible, not a bare Text: the back button and the
+                  // Restart/Hangar group are fixed-width, so on a narrow phone
+                  // the title was what pushed this Row past its bounds and
+                  // clipped the Restart button (#19). Loose fit keeps the
+                  // natural size — and so the current look — wherever it fits.
+                  const Flexible(
+                    // scaleDown rather than ellipsis: the title is the one
+                    // elastic thing here, and shrinking it keeps the whole
+                    // word where clipping would leave "INVAS…". Above ~430px
+                    // there is slack, so this is a no-op and the bar looks
+                    // exactly as it did.
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        'INVASION',
+                        maxLines: 1,
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 2,
+                          color: Colors.white,
+                        ),
+                      ),
                     ),
                   ),
                   Row(
                     children: [
                       if (!inMenu)
-                        TextButton.icon(
-                          icon: const Icon(Icons.rocket_launch, size: 16, color: Color(0xFF00F2FE)),
-                          label: const Text('Hangar', style: TextStyle(color: Color(0xFF00F2FE), fontWeight: FontWeight.bold)),
-                          onPressed: () => setState(() => inMenu = true),
-                        ),
-                      const SizedBox(width: 8),
+                        isNarrowBar
+                            // Icon-only on a narrow phone. The label is what
+                            // makes this group too wide to fit, and the rocket
+                            // already reads as "back to the hangar"; the
+                            // tooltip keeps it named for screen readers.
+                            ? IconButton(
+                                icon: const Icon(Icons.rocket_launch, size: 20, color: Color(0xFF00F2FE)),
+                                tooltip: 'Hangar',
+                                onPressed: () => setState(() => inMenu = true),
+                              )
+                            : TextButton.icon(
+                                icon: const Icon(Icons.rocket_launch, size: 16, color: Color(0xFF00F2FE)),
+                                label: const Text('Hangar', style: TextStyle(color: Color(0xFF00F2FE), fontWeight: FontWeight.bold)),
+                                onPressed: () => setState(() => inMenu = true),
+                              ),
+                      SizedBox(width: isNarrowBar ? 4 : 8),
                       ElevatedButton(
                         onPressed: () {
                           if (inMenu) {
@@ -1646,8 +1682,8 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.white,
                           foregroundColor: Colors.black,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
+                          padding: EdgeInsets.symmetric(
+                            horizontal: isNarrowBar ? 10 : 16,
                             vertical: 8,
                           ),
                           shape: RoundedRectangleBorder(
@@ -2429,9 +2465,18 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
                 ),
                 const SizedBox(height: 14),
 
-                // Game Mode Selector Pill
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                // Game Mode Selector Pill.
+                //
+                // A Wrap, not a Row: the two chips need ~440px and the hangar
+                // column is only ~332px wide on a 390px phone, so a Row pushed
+                // the ROGUELITE chip past its parent's right edge — outside the
+                // hit-test bounds, where it looked tappable but could not be
+                // selected at all (#19). This mirrors the action-button Wrap
+                // further down, which already handled narrow widths correctly.
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.center,
                   children: [
                     ChoiceChip(
                       label: const Text('CLASSIC ENDLESS'),
@@ -2446,7 +2491,6 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
                         fontSize: 11,
                       ),
                     ),
-                    const SizedBox(width: 12),
                     ChoiceChip(
                       label: const Text('ROGUELITE GALAXY'),
                       selected: isRogueliteMode,
