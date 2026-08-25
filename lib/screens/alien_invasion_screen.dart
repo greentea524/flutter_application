@@ -111,6 +111,72 @@ class LifetimeStats {
   }
 }
 
+const int kWeaponLevelCap = 5;
+
+enum PowerUpType { weapon, shield, drone, laser, homing }
+
+class PowerUpStyle {
+  final Color color;
+  final String letter;
+  const PowerUpStyle(this.color, this.letter);
+}
+
+// Colour and letter per crate, so a drop is readable at a glance while
+// dodging. Matches the web engine's _drawPowerUps.
+const Map<PowerUpType, PowerUpStyle> kPowerUpStyles = {
+  PowerUpType.weapon: PowerUpStyle(Color(0xFF00FFFF), 'W'),
+  PowerUpType.shield: PowerUpStyle(Color(0xFF3399FF), 'S'),
+  PowerUpType.drone: PowerUpStyle(Color(0xFF00FF88), 'D'),
+  PowerUpType.laser: PowerUpStyle(Color(0xFFFF3399), 'L'),
+  PowerUpType.homing: PowerUpStyle(Color(0xFF9933FF), 'H'),
+};
+
+// Fixed order, mirroring the web engine's POWERUP_TYPES. The app has no
+// multiplayer, so the roll is a plain _random draw -- but keeping the order
+// stable means a seeded pick would stay comparable if it ever gains one.
+const List<PowerUpType> kPowerUpDropOrder = PowerUpType.values;
+
+// Crates collected required to reach ladder level 2/3/4/5 (matches the web
+// engine's _applyWeaponUpgrade thresholds).
+const List<int> kWeaponLadderThresholds = [1, 3, 6, 10];
+
+// The weapon a trigger pull uses. Laser and homing alternate with the
+// standard shot rather than replacing it, so the weapon ladder never stops
+// mattering while a timed pickup is up. PowerUpType.weapon means "the
+// standard shot for the current ladder level".
+PowerUpType activeWeaponForCycle(
+  int cycleIndex, {
+  required bool laserActive,
+  required bool homingActive,
+}) {
+  final active = <PowerUpType>[
+    if (laserActive) PowerUpType.laser,
+    if (homingActive) PowerUpType.homing,
+    PowerUpType.weapon,
+  ];
+  return active[cycleIndex % active.length];
+}
+
+// Ladder level earned by [crates], before the ship's base level is applied
+// as a floor. 0 crates -> 1, then 1/3/6/10 crates -> 2/3/4/5.
+int weaponLevelForCrates(int crates) {
+  int level = 1;
+  for (int i = 0; i < kWeaponLadderThresholds.length; i++) {
+    if (crates >= kWeaponLadderThresholds[i]) {
+      level = i + 2;
+    }
+  }
+  return level;
+}
+
+const Map<int, String> kWeaponNames = {
+  1: 'Single Shot',
+  2: 'Dual Missile',
+  3: 'Triple Shot',
+  4: 'Quad Cannon',
+  5: 'Five-Way Spread',
+};
+
 class AchievementDef {
   final String id;
   final String name;
@@ -168,6 +234,14 @@ final List<AchievementDef> kAchievements = [
     desc: 'Reach weapon level 3',
     icon: '🚀',
     target: 3,
+    currentVal: (s) => s.maxWeaponLevel,
+  ),
+  AchievementDef(
+    id: 'fully_loaded_v2',
+    name: 'Maximum Firepower',
+    desc: 'Reach weapon level 5',
+    icon: '💥',
+    target: 5,
     currentVal: (s) => s.maxWeaponLevel,
   ),
   AchievementDef(
@@ -374,6 +448,21 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
   static const double coinSpeed = 2.5;
   static const double coinDropChance = 0.35;
   static const int coinValue = 25;
+  // Power-up effects, in the web engine's units (timers count down frames).
+  static const int powerUpScore = 50;
+  static const int shieldPickupHp = 50;
+  static const int droneDurationFrames = 600;
+  static const int droneDurationCapFrames = 1800;
+  static const int laserDurationFrames = 300;
+  static const int laserDurationCapFrames = 900;
+  static const int homingDurationFrames = 300;
+  static const int homingDurationCapFrames = 900;
+  static const int droneFireCooldownFrames = 30;
+  static const double laserBulletWidth = 16.0;
+  static const double laserBulletHeight = 40.0;
+  static const double laserSpeedMultiplier = 2.5;
+  static const double homingTurnRate = 0.5;
+  static const double homingMaxDrift = 4.0;
   static const int particleCount = 20;
   static const int particleLifetime = 30;
   static const int comboWindowFrames = 90;
@@ -401,6 +490,15 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
   int comboCount = 0;
   int comboTimerFrames = 0;
   int weaponLevel = 1;
+  int weaponCratesCollected = 0;
+  int playerShieldHp = 0;
+  int droneTimer = 0;
+  int laserTimer = 0;
+  int homingTimer = 0;
+  // Rotates the active weapons per trigger pull so laser/homing alternate
+  // with the standard shot instead of replacing it.
+  int shotCycleIndex = 0;
+  final List<GameDrone> drones = [GameDrone(), GameDrone()];
   int waveNumber = 1;
   int bulletsShot = 0;
   int hits = 0;
@@ -605,11 +703,13 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
     ));
   }
 
+  ShipConfig get _activeShipConfig => kShipConfigs.firstWhere(
+    (c) => c.id == selectedShipId,
+    orElse: () => kShipConfigs[0],
+  );
+
   void _resetGame() {
-    final config = kShipConfigs.firstWhere(
-      (c) => c.id == selectedShipId,
-      orElse: () => kShipConfigs[0],
-    );
+    final config = _activeShipConfig;
 
     final double pWidth = config.id == 'cruiser'
         ? 52.0
@@ -641,6 +741,15 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
     hits = 0;
     coinsCollected = 0;
     weaponLevel = config.baseWeaponLevel;
+    weaponCratesCollected = 0;
+    playerShieldHp = 0;
+    droneTimer = 0;
+    laserTimer = 0;
+    homingTimer = 0;
+    shotCycleIndex = 0;
+    for (final drone in drones) {
+      drone.reset();
+    }
     waveNumber = 1;
     comboCount = 0;
     comboTimerFrames = 0;
@@ -702,7 +811,19 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
 
   void _damagePlayer(int amount) {
     if (gameOver || inMenu || inGalaxyMap) return;
+    // A hit the shield eats still breaks the wave's flawless streak.
     waveTookDamage = true;
+
+    if (playerShieldHp > 0) {
+      if (amount <= playerShieldHp) {
+        playerShieldHp -= amount;
+        amount = 0;
+      } else {
+        amount -= playerShieldHp;
+        playerShieldHp = 0;
+      }
+    }
+
     player.hp = (player.hp - amount).clamp(0, player.maxHp);
     shakeIntensity = 8.0;
     flashOpacity = 0.4;
@@ -1043,6 +1164,11 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
       if (comboTimerFrames == 0) comboCount = 0;
     }
 
+    // Timed power-ups
+    if (droneTimer > 0) droneTimer--;
+    if (laserTimer > 0) laserTimer--;
+    if (homingTimer > 0) homingTimer--;
+
     // Player keyboard movement
     if (leftPressed && player.x > 0) {
       player.x -= player.speed;
@@ -1061,8 +1187,34 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
 
     // Update bullets
     for (int i = bullets.length - 1; i >= 0; i--) {
-      bullets[i].y -= bulletSpeed;
-      if (bullets[i].y < 0) {
+      final b = bullets[i];
+      final double? vy = b.vy;
+      if (vy != null) {
+        // Drone shots travel along their firing angle.
+        b.y += vy;
+      } else {
+        b.y -= b.isLaser ? bulletSpeed * laserSpeedMultiplier : bulletSpeed;
+      }
+      b.x += b.vx;
+
+      if (b.isHoming && aliens.isNotEmpty) {
+        final nearest = _nearestAlienTo(b.x, b.y);
+        if (nearest != null) {
+          final double dir =
+              (nearest.x + nearest.width / 2) - b.x < 0 ? -1.0 : 1.0;
+          b.vx = (b.vx + dir * homingTurnRate).clamp(
+            -homingMaxDrift,
+            homingMaxDrift,
+          );
+        }
+      }
+
+      // Drone shots can be angled downwards, so the floor needs a bound
+      // too or they leak once they pass the bottom of the screen.
+      if (b.y + b.height < 0 ||
+          b.y > currentHeight ||
+          b.x + b.width < 0 ||
+          b.x > logicalWidth) {
         bullets.removeAt(i);
       }
     }
@@ -1201,6 +1353,9 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
       }
     }
 
+    // Update escort drones
+    _updateDrones();
+
     // Collision detection: Bullets vs Aliens, Bosses, Spawnlings, InkShots
     for (int bIndex = bullets.length - 1; bIndex >= 0; bIndex--) {
       if (bIndex >= bullets.length) continue;
@@ -1211,9 +1366,9 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
       for (int sIdx = spawnlings.length - 1; sIdx >= 0; sIdx--) {
         final s = spawnlings[sIdx];
         if (bullet.x < s.x + s.width &&
-            bullet.x + bulletWidth > s.x &&
+            bullet.x + bullet.width > s.x &&
             bullet.y < s.y + s.height &&
-            bullet.y + bulletHeight > s.y) {
+            bullet.y + bullet.height > s.y) {
           _playClickSound();
           _createFireworks(s.x, s.y);
           spawnlings.removeAt(sIdx);
@@ -1230,9 +1385,9 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
       for (int inkIdx = inkShots.length - 1; inkIdx >= 0; inkIdx--) {
         final ink = inkShots[inkIdx];
         if (bullet.x < ink.x + ink.r &&
-            bullet.x + bulletWidth > ink.x - ink.r &&
+            bullet.x + bullet.width > ink.x - ink.r &&
             bullet.y < ink.y + ink.r &&
-            bullet.y + bulletHeight > ink.y - ink.r) {
+            bullet.y + bullet.height > ink.y - ink.r) {
           _playClickSound();
           _createFireworks(ink.x, ink.y);
           inkShots.removeAt(inkIdx);
@@ -1249,22 +1404,29 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
       for (int aIndex = aliens.length - 1; aIndex >= 0; aIndex--) {
         final alien = aliens[aIndex];
         if (bullet.x < alien.x + alien.width &&
-            bullet.x + bulletWidth > alien.x &&
+            bullet.x + bullet.width > alien.x &&
             bullet.y < alien.y + alien.height &&
-            bullet.y + bulletHeight > alien.y) {
+            bullet.y + bullet.height > alien.y) {
           _playClickSound();
           _createFireworks(alien.x, alien.y);
           HapticFeedback.lightImpact();
 
           // Drop logic
-          if (weaponLevel < 3 && _random.nextDouble() < powerUpDropChance) {
-            powerUps.add(
-              GamePowerUp(
-                alien.x + alien.width / 2 - powerUpSize / 2,
-                alien.y + alien.height / 2 - powerUpSize / 2,
-              ),
-            );
-          } else if (weaponLevel == 3 &&
+          if (_random.nextDouble() < powerUpDropChance) {
+            final type =
+                kPowerUpDropOrder[_random.nextInt(kPowerUpDropOrder.length)];
+            // A maxed-out player can't use another weapon crate, so that
+            // roll simply drops nothing (as in the web engine).
+            if (type != PowerUpType.weapon || weaponLevel < kWeaponLevelCap) {
+              powerUps.add(
+                GamePowerUp(
+                  alien.x + alien.width / 2 - powerUpSize / 2,
+                  alien.y + alien.height / 2 - powerUpSize / 2,
+                  type: type,
+                ),
+              );
+            }
+          } else if (weaponLevel == kWeaponLevelCap &&
               _random.nextDouble() < coinDropChance) {
             coins.add(
               GameCoin(alien.x + alien.width / 2, alien.y + alien.height / 2),
@@ -1295,9 +1457,9 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
       for (int boIdx = bosses.length - 1; boIdx >= 0; boIdx--) {
         final b = bosses[boIdx];
         if (bullet.x < b.x + b.width &&
-            bullet.x + bulletWidth > b.x &&
+            bullet.x + bullet.width > b.x &&
             bullet.y < b.y + b.height &&
-            bullet.y + bulletHeight > b.y) {
+            bullet.y + bullet.height > b.y) {
           _playClickSound();
           b.hp--;
           bullets.removeAt(bIndex);
@@ -1313,9 +1475,10 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
       }
     }
 
-    // Update PowerUps
-    for (int i = powerUps.length - 1; i >= 0; i--) {
-      final p = powerUps[i];
+    // Update PowerUps. Collecting one can mutate the list underneath us --
+    // maxing the weapon ladder drops every weapon crate still falling -- so
+    // walk a snapshot and remove by identity rather than by index.
+    for (final p in List<GamePowerUp>.of(powerUps)) {
       p.y += powerUpSpeed;
 
       final bool collected =
@@ -1326,14 +1489,11 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
 
       if (collected) {
         _playAlertSound();
-        _applyWeaponUpgrade();
+        powerUps.remove(p);
+        _applyPowerUp(p);
         HapticFeedback.vibrate();
-        if (powerUps.isEmpty) {
-          break;
-        }
-        powerUps.removeAt(i);
       } else if (p.y > currentHeight) {
-        powerUps.removeAt(i);
+        powerUps.remove(p);
       }
     }
 
@@ -1432,50 +1592,188 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
     }
   }
 
-  void _shootBullet() {
-    final int bulletsPerShot = weaponLevel;
-    if (weaponLevel == 3) {
-      bullets.add(
-        GameBullet(
-          player.x + player.width * 0.2 - bulletWidth / 2,
-          player.y - bulletHeight,
-        ),
-      );
-      bullets.add(
-        GameBullet(
-          player.x + player.width / 2 - bulletWidth / 2,
-          player.y - bulletHeight,
-        ),
-      );
-      bullets.add(
-        GameBullet(
-          player.x + player.width * 0.8 - bulletWidth / 2,
-          player.y - bulletHeight,
-        ),
-      );
-    } else if (weaponLevel == 2) {
-      bullets.add(
-        GameBullet(
-          player.x + player.width * 0.25 - bulletWidth / 2,
-          player.y - bulletHeight,
-        ),
-      );
-      bullets.add(
-        GameBullet(
-          player.x + player.width * 0.75 - bulletWidth / 2,
-          player.y - bulletHeight,
-        ),
-      );
-    } else {
-      bullets.add(
-        GameBullet(
-          player.x + player.width / 2 - bulletWidth / 2,
-          player.y - bulletHeight,
-        ),
-      );
+  // Muzzle offsets across the ship's width, with the horizontal drift the
+  // web engine gives each barrel. Index by weapon level.
+  static const Map<int, List<List<double>>> weaponPatterns = {
+    1: [
+      [0.5, 0.0],
+    ],
+    2: [
+      [0.25, 0.0],
+      [0.75, 0.0],
+    ],
+    3: [
+      [0.2, 0.0],
+      [0.5, 0.0],
+      [0.8, 0.0],
+    ],
+    // Quad
+    4: [
+      [0.2, -0.5],
+      [0.4, 0.0],
+      [0.6, 0.0],
+      [0.8, 0.5],
+    ],
+    // 5-way spread
+    5: [
+      [0.5, 0.0],
+      [0.3, -1.0],
+      [0.7, 1.0],
+      [0.1, -2.5],
+      [0.9, 2.5],
+    ],
+  };
+
+  GameAlien? _nearestAlienTo(double x, double y) {
+    GameAlien? nearest;
+    double minDist = double.infinity;
+    for (final a in aliens) {
+      final dx = (a.x + a.width / 2) - x;
+      final dy = (a.y + a.height / 2) - y;
+      final dist = dx * dx + dy * dy;
+      if (dist < minDist) {
+        minDist = dist;
+        nearest = a;
+      }
+    }
+    return nearest;
+  }
+
+  // Nearest alien or boss, as a centre point. Drones will shoot at either.
+  Offset? _nearestTargetTo(double x, double y) {
+    Offset? nearest;
+    double minDist = double.infinity;
+    void consider(double cx, double cy) {
+      final dx = cx - x;
+      final dy = cy - y;
+      final dist = dx * dx + dy * dy;
+      if (dist < minDist) {
+        minDist = dist;
+        nearest = Offset(cx, cy);
+      }
     }
 
-    bulletsShot += bulletsPerShot;
+    for (final a in aliens) {
+      consider(a.x + a.width / 2, a.y + a.height / 2);
+    }
+    for (final b in bosses) {
+      consider(b.x + b.width / 2, b.y + b.height / 2);
+    }
+    return nearest;
+  }
+
+  // Two escort drones flank the ship and fire on the nearest enemy. They
+  // run the same weapon cycle as the ship, so laser and homing pickups
+  // upgrade their shots too.
+  void _updateDrones() {
+    if (droneTimer <= 0) return;
+
+    final double targetY = player.y + 10;
+    final targets = <Offset>[
+      Offset(player.x - 30, targetY),
+      Offset(player.x + player.width + 10, targetY),
+    ];
+
+    for (int i = 0; i < drones.length; i++) {
+      final drone = drones[i];
+      final target = targets[i];
+
+      if (!drone.isPlaced) {
+        drone.x = target.dx;
+        drone.y = target.dy;
+      } else {
+        drone.x += (target.dx - drone.x) * 0.2;
+        drone.y += (target.dy - drone.y) * 0.2;
+      }
+
+      if (drone.cooldown > 0) drone.cooldown--;
+      if (drone.cooldown > 0) continue;
+
+      final nearest = _nearestTargetTo(drone.x, drone.y);
+      if (nearest == null) continue;
+
+      final angle = math.atan2(nearest.dy - drone.y, nearest.dx - drone.x);
+      drone.bulletsShot++;
+      final weaponToFire = activeWeaponForCycle(
+        drone.bulletsShot,
+        laserActive: laserTimer > 0,
+        homingActive: homingTimer > 0,
+      );
+      final bool isLaser = weaponToFire == PowerUpType.laser;
+      final bool isHoming = weaponToFire == PowerUpType.homing;
+
+      bullets.add(
+        GameBullet(
+          drone.x,
+          drone.y,
+          vx: math.cos(angle) * bulletSpeed,
+          vy: math.sin(angle) * bulletSpeed,
+          isLaser: isLaser,
+          isHoming: isHoming,
+          width: isLaser ? laserBulletWidth : bulletWidth,
+          height: isLaser ? laserBulletHeight : bulletHeight,
+        ),
+      );
+      // Drone rounds can score hits, so they have to count as shots too
+      // or Hit Rate climbs past 100%.
+      bulletsShot++;
+      drone.cooldown = droneFireCooldownFrames;
+    }
+  }
+
+  void _shootBullet() {
+    final int bulletsBefore = bullets.length;
+    shotCycleIndex++;
+    final weaponToFire = activeWeaponForCycle(
+      shotCycleIndex,
+      laserActive: laserTimer > 0,
+      homingActive: homingTimer > 0,
+    );
+
+    if (weaponToFire == PowerUpType.laser) {
+      bullets.add(
+        GameBullet(
+          player.x + player.width * 0.5 - laserBulletWidth / 2,
+          player.y - laserBulletHeight,
+          isLaser: true,
+          width: laserBulletWidth,
+          height: laserBulletHeight,
+        ),
+      );
+    } else if (weaponToFire == PowerUpType.homing) {
+      for (final barrel in const [
+        [0.2, -2.0],
+        [0.5, 0.0],
+        [0.8, 2.0],
+      ]) {
+        bullets.add(
+          GameBullet(
+            player.x + player.width * barrel[0] - bulletWidth / 2,
+            player.y - bulletHeight,
+            vx: barrel[1],
+            isHoming: true,
+          ),
+        );
+      }
+    } else {
+      final pattern =
+          weaponPatterns[weaponLevel.clamp(1, kWeaponLevelCap)] ??
+          weaponPatterns[1]!;
+      for (final barrel in pattern) {
+        bullets.add(
+          GameBullet(
+            player.x + player.width * barrel[0] - bulletWidth / 2,
+            player.y - bulletHeight,
+            vx: barrel[1],
+          ),
+        );
+      }
+    }
+
+    // Count the rounds actually fired. For levels 1-3 this matches the old
+    // `+= weaponLevel`; a one-round laser or a three-round homing volley
+    // would otherwise skew Hit Rate.
+    bulletsShot += bullets.length - bulletsBefore;
     canShoot = false;
     _playClickSound();
     HapticFeedback.selectionClick();
@@ -1491,15 +1789,54 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
     );
   }
 
+  void _applyPowerUp(GamePowerUp p) {
+    switch (p.type) {
+      case PowerUpType.weapon:
+        _applyWeaponUpgrade();
+      case PowerUpType.shield:
+        playerShieldHp = shieldPickupHp;
+      case PowerUpType.drone:
+        droneTimer = (droneTimer + droneDurationFrames).clamp(
+          0,
+          droneDurationCapFrames,
+        );
+      case PowerUpType.laser:
+        laserTimer = (laserTimer + laserDurationFrames).clamp(
+          0,
+          laserDurationCapFrames,
+        );
+      case PowerUpType.homing:
+        homingTimer = (homingTimer + homingDurationFrames).clamp(
+          0,
+          homingDurationCapFrames,
+        );
+    }
+    // Pickups are not kills, so they score flat like coins do.
+    _addScore(
+      powerUpScore,
+      p.x,
+      p.y,
+      kPowerUpStyles[p.type]!.color,
+      countsForCombo: false,
+    );
+  }
+
   void _applyWeaponUpgrade() {
-    weaponLevel = (weaponLevel + 1).clamp(1, 3);
+    weaponCratesCollected++;
+    // The cruiser starts at level 2, so the ship's base level is a floor
+    // rather than something the ladder can walk back.
+    weaponLevel = weaponLevelForCrates(
+      weaponCratesCollected,
+    ).clamp(_activeShipConfig.baseWeaponLevel, kWeaponLevelCap);
     if (weaponLevel > lifetimeStats.maxWeaponLevel) {
       lifetimeStats.maxWeaponLevel = weaponLevel;
       _checkAchievements();
       _saveLifetimeData();
     }
-    if (weaponLevel == 3) {
-      powerUps.clear();
+    if (weaponLevel == kWeaponLevelCap) {
+      // Only the now-useless weapon crates go; shield/drone/laser/homing
+      // crates already falling are still worth catching.
+      powerUps.removeWhere((p) => p.type == PowerUpType.weapon);
     }
   }
 
@@ -1758,6 +2095,12 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
                               coinsCollected: coinsCollected,
                               waveNumber: waveNumber,
                               weaponLevel: weaponLevel,
+                              playerShieldHp: playerShieldHp,
+                              shieldMaxHp: shieldPickupHp,
+                              droneTimer: droneTimer,
+                              laserTimer: laserTimer,
+                              homingTimer: homingTimer,
+                              drones: drones,
                               shakeIntensity: shakeIntensity,
                               flashOpacity: flashOpacity,
                               logicalHeight: currentHeight,
@@ -2421,10 +2764,7 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
   }
 
   Widget _buildHangarOverlay(bool isMobile) {
-    final selectedConfig = kShipConfigs.firstWhere(
-      (c) => c.id == selectedShipId,
-      orElse: () => kShipConfigs[0],
-    );
+    final selectedConfig = _activeShipConfig;
 
     return Container(
       color: Colors.black.withValues(alpha: 0.88),
@@ -2599,7 +2939,7 @@ class _AlienInvasionScreenState extends State<AlienInvasionScreen>
                               const SizedBox(height: 6),
                               _buildStatBar('SPEED', ship.speed / 7.5, '${ship.speed.toStringAsFixed(1)}x', ship.primaryColor),
                               const SizedBox(height: 6),
-                              _buildStatBar('FIREPOWER', ship.baseWeaponLevel / 3.0, 'LVL ${ship.baseWeaponLevel}', ship.primaryColor),
+                              _buildStatBar('FIREPOWER', ship.baseWeaponLevel / kWeaponLevelCap, 'LVL ${ship.baseWeaponLevel}', ship.primaryColor),
                             ],
                           ),
                         ),
@@ -2770,7 +3110,24 @@ class GamePlayer {
 class GameBullet {
   double x;
   double y;
-  GameBullet(this.x, this.y);
+  double vx;
+  // Non-null only for drone shots, which travel at an arbitrary angle
+  // instead of straight up.
+  double? vy;
+  final bool isLaser;
+  final bool isHoming;
+  final double width;
+  final double height;
+  GameBullet(
+    this.x,
+    this.y, {
+    this.vx = 0.0,
+    this.vy,
+    this.isLaser = false,
+    this.isHoming = false,
+    this.width = 4.0,
+    this.height = 10.0,
+  });
 }
 
 class GameAlien {
@@ -2883,12 +3240,31 @@ class GameParticle {
   });
 }
 
+class GameDrone {
+  // (0, 0) means "not yet positioned" -- the first update snaps the drone
+  // to its slot instead of lerping in from the corner.
+  double x = 0.0;
+  double y = 0.0;
+  int cooldown = 0;
+  int bulletsShot = 0;
+
+  bool get isPlaced => x != 0.0 || y != 0.0;
+
+  void reset() {
+    x = 0.0;
+    y = 0.0;
+    cooldown = 0;
+    bulletsShot = 0;
+  }
+}
+
 class GamePowerUp {
   double x;
   double y;
   double width = 16.0;
   double height = 16.0;
-  GamePowerUp(this.x, this.y);
+  final PowerUpType type;
+  GamePowerUp(this.x, this.y, {this.type = PowerUpType.weapon});
 }
 
 class GameCoin {
@@ -2959,6 +3335,12 @@ class GamePainter extends CustomPainter {
   final int coinsCollected;
   final int waveNumber;
   final int weaponLevel;
+  final int playerShieldHp;
+  final int shieldMaxHp;
+  final int droneTimer;
+  final int laserTimer;
+  final int homingTimer;
+  final List<GameDrone> drones;
 
   final double shakeIntensity;
   final double flashOpacity;
@@ -2992,6 +3374,12 @@ class GamePainter extends CustomPainter {
     required this.coinsCollected,
     required this.waveNumber,
     required this.weaponLevel,
+    required this.playerShieldHp,
+    required this.shieldMaxHp,
+    required this.droneTimer,
+    required this.laserTimer,
+    required this.homingTimer,
+    required this.drones,
     required this.shakeIntensity,
     required this.flashOpacity,
     required this.logicalHeight,
@@ -3244,28 +3632,68 @@ class GamePainter extends CustomPainter {
       hpFillPaint,
     );
 
-    // 4. Draw Bullets (Red Rectangles)
-    final bulletPaint = Paint()
-      ..color = const Color(0xFFFF4040)
-      ..style = PaintingStyle.fill;
+    // Shield bar, stacked just above the hull bar while it holds.
+    if (playerShieldHp > 0) {
+      final double shieldRatio = (playerShieldHp / shieldMaxHp).clamp(0.0, 1.0);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(px, py + ph + 11.5, pw * shieldRatio, 3.0),
+          const Radius.circular(2),
+        ),
+        Paint()
+          ..color = kPowerUpStyles[PowerUpType.shield]!.color
+          ..style = PaintingStyle.fill,
+      );
+    }
+
+    // 4. Draw Bullets -- standard red, laser pink, homing purple
+    final bulletPaint = Paint()..style = PaintingStyle.fill;
     for (final bullet in bullets) {
+      bulletPaint.color = bullet.isLaser
+          ? kPowerUpStyles[PowerUpType.laser]!.color
+          : bullet.isHoming
+          ? kPowerUpStyles[PowerUpType.homing]!.color
+          : const Color(0xFFFF4040);
       canvas.drawRect(
-        Rect.fromLTWH(bullet.x, bullet.y, 4.0, 10.0),
+        Rect.fromLTWH(bullet.x, bullet.y, bullet.width, bullet.height),
         bulletPaint,
       );
     }
 
-    // 5. Draw Powerups (Cyan boxes with black crosses)
-    final powerUpPaint = Paint()
-      ..color = Colors.cyan
-      ..style = PaintingStyle.fill;
-    final crossPaint = Paint()
-      ..color = Colors.black
-      ..style = PaintingStyle.fill;
+    // 5. Draw Powerups (colour-coded boxes, lettered by type)
+    final powerUpPaint = Paint()..style = PaintingStyle.fill;
     for (final p in powerUps) {
-      canvas.drawRect(Rect.fromLTWH(p.x, p.y, 16.0, 16.0), powerUpPaint);
-      canvas.drawRect(Rect.fromLTWH(p.x + 6, p.y + 3, 4.0, 10.0), crossPaint);
-      canvas.drawRect(Rect.fromLTWH(p.x + 3, p.y + 6, 10.0, 4.0), crossPaint);
+      final style = kPowerUpStyles[p.type]!;
+      powerUpPaint.color = style.color;
+      canvas.drawRect(Rect.fromLTWH(p.x, p.y, p.width, p.height), powerUpPaint);
+      _drawText(
+        canvas: canvas,
+        text: style.letter,
+        x: p.x + p.width / 2,
+        y: p.y + 1.0,
+        color: Colors.black,
+        fontSize: 12.0,
+        bold: true,
+        centered: true,
+      );
+    }
+
+    // 5b. Escort drones (green darts flanking the ship)
+    if (droneTimer > 0) {
+      final dronePaint = Paint()
+        ..color = kPowerUpStyles[PowerUpType.drone]!.color
+        ..style = PaintingStyle.fill;
+      for (final drone in drones) {
+        if (!drone.isPlaced) continue;
+        canvas.drawPath(
+          Path()
+            ..moveTo(drone.x, drone.y - 6)
+            ..lineTo(drone.x + 6, drone.y + 4)
+            ..lineTo(drone.x - 6, drone.y + 4)
+            ..close(),
+          dronePaint,
+        );
+      }
     }
 
     // 6. Draw Coins (Gold Circles with dark borders)
@@ -3467,11 +3895,8 @@ class GamePainter extends CustomPainter {
       );
     }
 
-    final String weaponStatus = weaponLevel == 1
-        ? 'Single Shot'
-        : weaponLevel == 2
-        ? 'Dual Missile'
-        : 'Triple Shot';
+    final String weaponStatus =
+        kWeaponNames[weaponLevel.clamp(1, kWeaponLevelCap)] ?? 'Single Shot';
 
     _drawText(
       canvas: canvas,
